@@ -1,17 +1,17 @@
 import feedparser
 import requests
 import os
-from pathlib import Path
-import base64
 import json
+import base64
 
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 GH_TOKEN = os.environ["GH_TOKEN"]
-REPO = "arval-o.github.io/Discord-Weather-Fan/" 
-BRANCH = "main"         
-PAGE_FOLDER = "docs"    
-RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
+REPO = "arval-o/Discord-Weather-Fan"
+BRANCH = "main"
+PAGE_FOLDER = "docs"
 STATE_FILE = "last_id.txt"
+
+RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
 # Load last posted ID
 try:
@@ -22,22 +22,21 @@ except:
 
 feed = feedparser.parse(RSS_URL)
 if not feed.entries:
-    print("No entries in RSS feed")
+    print("No entries found")
     exit()
 
 latest = feed.entries[0]
 
+# Only post if new
 if latest.id == last_id:
     print("Already posted latest outlook")
     exit()
 
 last_id = latest.id
 
-# Determine SPC image URL
+# Determine image URL
 title = latest.title.lower()
-image_url = None
 filename = None
-
 if "day 1" in title:
     image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk.gif"
     filename = "day1otlk.gif"
@@ -47,25 +46,25 @@ elif "day 2" in title:
 elif "day 3" in title:
     image_url = "https://www.spc.noaa.gov/products/outlook/day3otlk.gif"
     filename = "day3otlk.gif"
-
-if image_url is None:
-    print("No image found for latest outlook")
+else:
+    print("No matching image for latest outlook")
     exit()
 
-# Download the image
+# Download GIF
 r = requests.get(image_url)
 with open(filename, "wb") as f:
     f.write(r.content)
 
-# Upload to GitHub Pages using REST API
+# Prepare GitHub API upload
+api_url = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
+headers = {"Authorization": f"token {GH_TOKEN}"}
+
+# Check if file exists to get SHA (needed for updates)
+r_check = requests.get(api_url, headers=headers)
+sha = r_check.json().get("sha") if r_check.status_code == 200 else None
+
 with open(filename, "rb") as f:
     content_b64 = base64.b64encode(f.read()).decode()
-
-api_url = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
-
-# Check if file already exists to get SHA
-r = requests.get(api_url, headers={"Authorization": f"token {GH_TOKEN}"})
-sha = r.json()["sha"] if r.status_code == 200 else None
 
 payload = {
     "message": f"Update {filename}",
@@ -75,16 +74,16 @@ payload = {
 if sha:
     payload["sha"] = sha
 
-r = requests.put(api_url, headers={"Authorization": f"token {GH_TOKEN}"}, data=json.dumps(payload))
-if r.status_code not in [200, 201]:
-    print("Error uploading to GitHub Pages:", r.text)
+r_put = requests.put(api_url, headers=headers, data=json.dumps(payload))
+if r_put.status_code not in [200, 201]:
+    print("Error uploading to GitHub Pages:", r_put.text)
     exit()
 
-# Construct public GitHub Pages URL
+# Public URL for embed
 public_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{PAGE_FOLDER}/{filename}"
 
-# Post to Discord as an embed
-data = {
+# Post to Discord
+embed_data = {
     "embeds": [
         {
             "title": latest.title,
@@ -95,13 +94,13 @@ data = {
         }
     ]
 }
-requests.post(WEBHOOK_URL, json=data)
+requests.post(WEBHOOK_URL, json=embed_data)
 
-# Update state file
+# Save last posted ID
 with open(STATE_FILE, "w") as f:
     f.write(latest.id)
 
-# Clean up local file
+# Clean up
 os.remove(filename)
 
 print("Posted SPC outlook to Discord successfully!")
