@@ -3,7 +3,7 @@ name: SPC Bot
 on:
   schedule:
     - cron: "*/5 * * * *"  # every 5 minutes
-  workflow_dispatch:
+  workflow_dispatch:       # allows manual run
 
 jobs:
   run:
@@ -15,7 +15,7 @@ jobs:
       - name: Install dependencies
         run: pip install feedparser requests
 
-      - name: Run bot
+      - name: Run SPC bot
         run: python spc_bot.py
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
