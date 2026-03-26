@@ -21,9 +21,18 @@ if feed.entries:
 
     if latest.id != last_id:
         data = {
-            "content": f"🚨 **New SPC Outlook**\n{latest.title}\n{latest.link}"
+            "embeds": [
+                {
+                    "title": latest.title,
+                    "url": latest.link,
+                    "description": "SPC Convective Outlook",
+                    "image": {
+                        "url": "https://www.spc.noaa.gov/products/outlook/day1otlk_1300.gif"
+                    },
+                    "color": 16711680
+                }
+            ]
         }
-
         requests.post(WEBHOOK_URL, json=data)
 
         with open(STATE_FILE, "w") as f:
