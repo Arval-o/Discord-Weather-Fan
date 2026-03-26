@@ -1,0 +1,21 @@
+name: SPC Bot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"  # every 5 minutes
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: pip install feedparser requests
+
+      - name: Run bot
+        run: python spc_bot.py
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
