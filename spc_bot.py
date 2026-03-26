@@ -24,14 +24,12 @@ if feed.entries:
         title = latest.title.lower()
 
         if "day 1" in title:
+            # Latest Day 1 outlook (convective outlook map)
             image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk.gif"
-        
         elif "day 2" in title:
             image_url = "https://www.spc.noaa.gov/products/outlook/day2otlk.gif"
-        
         elif "day 3" in title:
             image_url = "https://www.spc.noaa.gov/products/outlook/day3otlk.gif"
-        
         else:
             image_url = None
         
