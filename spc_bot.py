@@ -25,7 +25,7 @@ if feed.entries:
     latest = feed.entries[0]
 
     # Only post if this is a new outlook
-    if latest.id != last_id:
+    #if latest.id != last_id:
         last_id = latest.id
 
         title = latest.title.lower()
