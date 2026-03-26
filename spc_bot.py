@@ -7,7 +7,7 @@ import json
 
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 GH_TOKEN = os.environ["GH_TOKEN"]
-REPO = "Arval-o/Discord-Weather-Fan" 
+REPO = "arval-o.github.io/Discord-Weather-Fan/" 
 BRANCH = "main"         
 PAGE_FOLDER = "docs"    
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
