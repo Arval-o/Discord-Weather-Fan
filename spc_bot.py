@@ -3,7 +3,7 @@ import requests
 import json
 import os
 
-WEBHOOK_URL = os.environ["https://discord.com/api/webhooks/1486827605087748108/Oga9GPq_iALtvY4GXNFfBW-AdAysNnvUP-Hdp5dsVQ6MtNt9G0cxWayXY7E35TRmYroU"]
+WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 STATE_FILE = "last_id.txt"
 
