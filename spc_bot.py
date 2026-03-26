@@ -20,15 +20,30 @@ if feed.entries:
     latest = feed.entries[0]
 
     if latest.id != last_id:
+        title = latest.title.lower()
+        
+        image_url = None
+        
+        if "day 1" in title:
+            if "1300" in title:
+                image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_1300.gif"
+            elif "1630" in title:
+                image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_1630.gif"
+            elif "2000" in title:
+                image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_2000.gif"
+        
+        elif "day 2" in title:
+            image_url = "https://www.spc.noaa.gov/products/outlook/day2otlk.gif"
+        
+        elif "day 3" in title:
+            image_url = "https://www.spc.noaa.gov/products/outlook/day3otlk.gif"
+        
         data = {
             "embeds": [
                 {
                     "title": latest.title,
                     "url": latest.link,
-                    "description": "SPC Convective Outlook",
-                    "image": {
-                        "url": "https://www.spc.noaa.gov/products/outlook/day1otlk_1300.gif"
-                    },
+                    "image": {"url": image_url} if image_url else {},
                     "color": 16711680
                 }
             ]
