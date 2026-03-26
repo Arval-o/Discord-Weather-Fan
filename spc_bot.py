@@ -22,16 +22,9 @@ if feed.entries:
     if latest.id != last_id:
         last_id = latest.id
         title = latest.title.lower()
-        
-        image_url = None
-        
+
         if "day 1" in title:
-            if "1300" in title:
-                image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_1300.gif"
-            elif "1630" in title:
-                image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_1630.gif"
-            elif "2000" in title:
-                image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_2000.gif"
+            image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk.gif"
         
         elif "day 2" in title:
             image_url = "https://www.spc.noaa.gov/products/outlook/day2otlk.gif"
@@ -39,12 +32,15 @@ if feed.entries:
         elif "day 3" in title:
             image_url = "https://www.spc.noaa.gov/products/outlook/day3otlk.gif"
         
+        else:
+            image_url = None
+        
         data = {
             "embeds": [
                 {
                     "title": latest.title,
                     "url": latest.link,
-                    "image": {"url": image_url} if image_url else {},
+                    "image": {"url": image_url} if image_url else None,
                     "color": 16711680
                 }
             ]
