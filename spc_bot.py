@@ -14,10 +14,10 @@ PAGE_FOLDER = "docs"
 STATE_FILE = "last_id.txt"
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
-# Day 1 priority order
+# Day 1 priority (high → low)
 DAY1_PRIORITY = ["2000", "1630", "1300"]
 
-# === Load last posted IDs per day ===
+# === Load last posted state ===
 try:
     with open(STATE_FILE, "r") as f:
         last_id = json.load(f)
@@ -48,18 +48,19 @@ for entry in entries:
 
 # --- Determine Day 1 to post ---
 day1_to_post = None
+last_posted_priority = last_id.get("1_priority", "")
 for t in DAY1_PRIORITY:
     entry = day_entries["1"].get(t)
     if entry:
-        last_posted_priority = last_id.get("1_priority", "")
-        # Only post if higher priority or not posted yet
-        if (last_posted_priority == "" or
-            DAY1_PRIORITY.index(t) < DAY1_PRIORITY.index(last_posted_priority)):
+        # Only post if higher priority than last posted or nothing posted yet
+        if last_posted_priority == "":
             day1_to_post = (entry, t)
             break
-        elif last_id.get("1") != entry.id:
+        elif DAY1_PRIORITY.index(t) < DAY1_PRIORITY.index(last_posted_priority):
             day1_to_post = (entry, t)
             break
+        else:
+            continue  # lower or equal priority → skip
 
 # --- Determine Day 2/3 to post ---
 day2_to_post = day_entries["2"].get("day2")
@@ -69,7 +70,7 @@ if day2_to_post and last_id.get("2") == day2_to_post.id:
 if day3_to_post and last_id.get("3") == day3_to_post.id:
     day3_to_post = None
 
-# --- Helper to upload image to GitHub Pages ---
+# --- Helper: Upload image to GitHub Pages ---
 def upload_image(filename):
     image_url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
     r = requests.get(image_url)
@@ -82,7 +83,7 @@ def upload_image(filename):
     api_url = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
     headers = {"Authorization": f"token {GH_TOKEN}"}
 
-    # Refresh SHA immediately
+    # Refresh SHA before PUT
     r_check = requests.get(api_url, headers=headers)
     sha = r_check.json().get("sha") if r_check.status_code == 200 else None
 
@@ -122,7 +123,7 @@ if day1_to_post:
         last_id["1_priority"] = t
         print(f"Prepared Day 1 {t} for posting")
 
-# Day 2/3 embed (combined)
+# Day 2/3 combined embed
 if day2_to_post or day3_to_post:
     description = ""
     for entry, day in [(day2_to_post, "2"), (day3_to_post, "3")]:
@@ -142,6 +143,7 @@ if embeds:
     r_discord = requests.post(WEBHOOK_URL, json=payload)
     if r_discord.status_code == 204:
         print("Posted embed(s) to Discord")
+        # Update state to prevent repeated pings
         with open(STATE_FILE, "w") as f:
             json.dump(last_id, f)
     else:
