@@ -68,13 +68,17 @@ for entry in feed.entries:
         if day_key == "1":
             current_priority = day1_priority.index(filename.split("_")[1].split(".")[0])
             existing_priority = day1_priority.index(newest_per_day[day_key]['filename'].split("_")[1].split(".")[0])
-            if current_priority <= existing_priority:
-                continue  # keep higher priority one
+            if current_priority > existing_priority:
+                # Current is lower priority than existing, skip it
+                continue
+            else:
+                # Current is higher priority, replace existing
+                newest_per_day[day_key] = {"entry": entry, "filename": filename}
         else:
             continue  # Day 2/3: keep first found
-
-    newest_per_day[day_key] = {"entry": entry, "filename": filename}
-
+    else:
+        newest_per_day[day_key] = {"entry": entry, "filename": filename}
+    
 # === Post newest entries per day ===
 for day_key, data in newest_per_day.items():
     entry = data["entry"]
