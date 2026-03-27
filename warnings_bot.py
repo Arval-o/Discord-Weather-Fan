@@ -7,7 +7,8 @@ STATE_FILE = "last_warnings.txt"
 
 URL = "https://api.weather.gov/alerts/active?area=PA"
 
-TARGET_COUNTY = "Allegheny"
+TARGET_COUNTY = None
+NWS_OFFICE = "PBZ"
 TARGET_TYPES = ["Tornado Warning", "Severe Thunderstorm Warning"]
 
 # Optional: put your role ID here (or leave None)
@@ -42,8 +43,12 @@ for alert in data.get("features", []):
     area = props.get("areaDesc", "")
 
     # Filter by county + type
-    if TARGET_COUNTY not in area:
-        print("No warnings in county")
+    sender = props.get("senderName", "")
+
+    if NWS_OFFICE and "Pittsburgh" not in sender:
+        continue
+    
+    if TARGET_COUNTY and TARGET_COUNTY not in area:
         continue
 
     if event not in TARGET_TYPES:
