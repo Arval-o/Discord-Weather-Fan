@@ -2,7 +2,6 @@ import feedparser
 import requests
 import os
 import json
-import base64
 import time
 from shapely.geometry import shape, Point
 
@@ -15,12 +14,13 @@ PAGE_FOLDER = "docs"
 STATE_FILE = "last_id.txt"
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 ROLE_ID = "1485401778962043021"  # ENH/MDT ping
-POINT = Point(-80.096278, 40.615111)  # lon, lat
+POINT = Point(-80.096278, 40.615111)  # lon, lat for Allegheny County
 
 DAY1_PRIORITY = ["2000", "1630", "1300"]
+
 RISK_COLORS = {
     "NONE": 0x808080,    # gray
-    "TSTM": 0x90ee90,    # pale light green
+    "TSTM": 0x90ee90,    # pale green
     "MRGL": 0x006400,    # dark green
     "SLGT": 0xFFFF00,    # yellow
     "ENH": 0xFFA500,     # orange
@@ -119,6 +119,7 @@ def get_risk_for_point(day, filename_base):
 
 # === Prepare embeds ===
 embeds = []
+content_to_post = ""  # always define
 
 # --- Day 1 ---
 if day1_to_post:
@@ -128,11 +129,11 @@ if day1_to_post:
     if url:
         risk, sub_risks = get_risk_for_point(1, f"day1otlk_{t}")
         color = RISK_COLORS.get(risk, 0x808080)
-        content = ""
+        # Ping logic
         if risk in ["ENH","MDT"]:
-            content = f"<@&{ROLE_ID}>"
+            content_to_post = f"<@&{ROLE_ID}>"
         elif risk == "HIGH":
-            content = "@everyone"
+            content_to_post = "@everyone"
 
         tor = sub_risks.get("tornado", 0)
         wind = sub_risks.get("wind", 0)
@@ -165,7 +166,10 @@ if day1_to_post:
         last_id["1_priority"] = t
         print(f"Prepared Day 1 {t} for posting")
 
-# --- Day 2 ---
+# --- Day 2 & 3 combined as thumbnails ---
+day2_embed = None
+day3_embed = None
+
 if day_entries["2"]:
     entry2 = day_entries["2"]
     fn2 = "day2otlk.png"
@@ -173,22 +177,16 @@ if day_entries["2"]:
     if url2:
         risk2, _ = get_risk_for_point(2, "day2otlk")
         color2 = RISK_COLORS.get(risk2, 0x808080)
-        content2 = ""
-        if risk2 in ["ENH","MDT"]:
-            content2 = f"<@&{ROLE_ID}>"
-        elif risk2 == "HIGH":
-            content2 = "@everyone"
-        embeds.append({
+        day2_embed = {
             "title": entry2.title,
             "url": entry2.link,
             "description": f"SPC Day 2 Convective Outlook\nRisk: {risk2}",
             "color": color2,
             "thumbnail": {"url": url2}
-        })
+        }
         last_id["2"] = entry2.id
         print("Prepared Day 2 embed with thumbnail")
 
-# --- Day 3 ---
 if day_entries["3"]:
     entry3 = day_entries["3"]
     fn3 = "day3otlk.png"
@@ -196,19 +194,25 @@ if day_entries["3"]:
     if url3:
         risk3, _ = get_risk_for_point(3, "day3otlk")
         color3 = RISK_COLORS.get(risk3, 0x808080)
-        embeds.append({
+        day3_embed = {
             "title": entry3.title,
             "url": entry3.link,
             "description": f"SPC Day 3 Convective Outlook\nRisk: {risk3}",
             "color": color3,
             "thumbnail": {"url": url3}
-        })
+        }
         last_id["3"] = entry3.id
         print("Prepared Day 3 embed with thumbnail")
 
+# Append Day 2/3 embeds after Day 1 (if exist)
+if day2_embed:
+    embeds.append(day2_embed)
+if day3_embed:
+    embeds.append(day3_embed)
+
 # --- Post to Discord ---
 if embeds:
-    r_discord = requests.post(WEBHOOK_URL, json={"content": content, "embeds": embeds})
+    r_discord = requests.post(WEBHOOK_URL, json={"content": content_to_post, "embeds": embeds})
     if r_discord.status_code == 204:
         print("Posted embed(s) to Discord")
         with open(STATE_FILE, "w") as f:
