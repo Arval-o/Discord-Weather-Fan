@@ -11,16 +11,16 @@ GH_TOKEN = os.environ["GH_TOKEN"]
 REPO = "arval-o/Discord-Weather-Fan"
 BRANCH = "main"
 PAGE_FOLDER = "docs"
-STATE_FILE = "last_id.txt"
+STATE_FILE = "last_ids.json"
 
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
-# === Load last posted ID ===
+# === Load last posted IDs per day (Day 1, 2, 3 only) ===
 try:
     with open(STATE_FILE, "r") as f:
-        last_id = f.read().strip()
+        last_ids = json.load(f)
 except FileNotFoundError:
-    last_id = ""
+    last_ids = {}  # e.g., {"1": "id", "2": "id", "3": "id"}
 
 # === Parse RSS feed ===
 feed = feedparser.parse(RSS_URL)
@@ -32,36 +32,37 @@ if not feed.entries:
 entries = feed.entries[::-1]
 
 for entry in entries:
-    if entry.id == last_id:
-        continue  # already posted
-
     title = entry.title.lower()
-    filename = None
-    image_url = None
 
-    # === Determine correct SPC image URL and filename ===
+    # Determine which day this outlook is
     if "day 1" in title:
+        day_key = "1"
+        # Determine which Day 1 version
         if "1300" in title:
-            image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_1300.png"
             filename = "day1otlk_1300.png"
         elif "1630" in title:
-            image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_1630.png"
             filename = "day1otlk_1630.png"
         elif "2000" in title:
-            image_url = "https://www.spc.noaa.gov/products/outlook/day1otlk_2000.png"
             filename = "day1otlk_2000.png"
+        else:
+            continue  # skip unknown Day 1 version
     elif "day 2" in title:
-        image_url = "https://www.spc.noaa.gov/products/outlook/day2otlk.png"
+        day_key = "2"
         filename = "day2otlk.png"
     elif "day 3" in title:
-        image_url = "https://www.spc.noaa.gov/products/outlook/day3otlk.png"
+        day_key = "3"
         filename = "day3otlk.png"
-
-    if not image_url or not filename:
-        print(f"No matching image for {entry.title}")
+    else:
+        # Skip Day 4-8 or any other unknown outlook
         continue
 
-    # === Download the SPC image ===
+    # Skip if already posted
+    if last_ids.get(day_key) == entry.id:
+        continue
+
+    image_url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
+
+    # === Download image ===
     r = requests.get(image_url)
     if r.status_code != 200:
         print(f"Error downloading image {filename}")
@@ -70,7 +71,7 @@ for entry in entries:
     with open(filename, "wb") as f:
         f.write(r.content)
 
-    # === GitHub API: upload/update file in /docs ===
+    # === Upload/update GitHub Pages file ===
     api_url = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
     headers = {"Authorization": f"token {GH_TOKEN}"}
 
@@ -110,17 +111,17 @@ for entry in entries:
             }
         ]
     }
-    time.sleep(5)  # small delay to avoid rate limits
+    time.sleep(5)
     r_discord = requests.post(WEBHOOK_URL, json=embed_data)
     if r_discord.status_code != 204:
         print("Error posting to Discord:", r_discord.text)
     else:
         print(f"Successfully posted {entry.title} to Discord")
 
-    # === Update last posted ID ===
-    last_id = entry.id
+    # === Update last posted ID for this day ===
+    last_ids[day_key] = entry.id
     with open(STATE_FILE, "w") as f:
-        f.write(last_id)
+        json.dump(last_ids, f)
 
     # === Clean up local file ===
     os.remove(filename)
