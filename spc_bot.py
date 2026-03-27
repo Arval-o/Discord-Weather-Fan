@@ -20,7 +20,7 @@ try:
     with open(STATE_FILE, "r") as f:
         last_ids = json.load(f)
 except FileNotFoundError:
-    last_ids = {}  # e.g., {"1": "id", "2": "id", "3": "id"}
+    last_ids = {}  # e.g., {"1": "id-of-last-day1", "2": "id-of-last-day2", "3": "id-of-last-day3"}
 
 # === Parse RSS feed ===
 feed = feedparser.parse(RSS_URL)
@@ -58,6 +58,7 @@ for entry in entries:
 
     # Skip if already posted
     if last_ids.get(day_key) == entry.id:
+        print(f"Skipping already posted {entry.title}")
         continue
 
     image_url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
@@ -118,7 +119,7 @@ for entry in entries:
     else:
         print(f"Successfully posted {entry.title} to Discord")
 
-    # === Update last posted ID for this day ===
+    # === Update last posted ID for this day only after successful post ===
     last_ids[day_key] = entry.id
     with open(STATE_FILE, "w") as f:
         json.dump(last_ids, f)
