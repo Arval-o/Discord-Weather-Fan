@@ -2,7 +2,7 @@ name: Weather Bots
 
 on:
   schedule:
-    - cron: "*/6 * * * *"  # Runs every 5 minutes (GitHub limit)
+    - cron: "*/6 * * * *"  # Runs every 6 minutes (GitHub limit)
   workflow_dispatch:       # Allows manual run
 
 jobs:
