@@ -12,9 +12,8 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Trigger Watchdog Workflow
-        uses: peter-evans/workflow-dispatch@v1
+        uses: peter-evans/repository-dispatch@v2
         with:
           token: ${{ secrets.GH_TOKEN }}
-          repository: Arval-o/Discord-Weather-Fan   
-          workflow: spc.yml                    
-          ref: main                               
+          repository: Arval-o/Discord-Weather-Fan
+          event-type: trigger-spc         
