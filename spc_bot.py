@@ -11,7 +11,7 @@ GH_TOKEN = os.environ["GH_TOKEN"]
 REPO = "arval-o/Discord-Weather-Fan"
 BRANCH = "main"
 PAGE_FOLDER = "docs"
-STATE_FILE = "last_id.json"
+STATE_FILE = "last_id.txt"
 
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
