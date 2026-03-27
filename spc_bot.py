@@ -22,7 +22,7 @@ try:
     with open(STATE_FILE, "r") as f:
         last_id = json.load(f)
 except (FileNotFoundError, json.JSONDecodeError):
-    last_id = {}
+    last_id = {}  # {"1": "<id>", "1_priority": "2000", "2": "<id>", "3": "<id>"}
 
 # === Parse RSS feed ===
 feed = feedparser.parse(RSS_URL)
@@ -30,10 +30,9 @@ if not feed.entries:
     print("No entries found")
     exit()
 
-# Reverse so oldest first
-entries = feed.entries[::-1]
+entries = feed.entries[::-1]  # oldest first
 
-# Separate entries by day
+# --- Separate entries by day ---
 day_entries = {"1": {}, "2": {}, "3": {}}
 for entry in entries:
     title = entry.title.lower()
@@ -47,25 +46,30 @@ for entry in entries:
     elif "day 3" in title:
         day_entries["3"]["day3"] = entry
 
-# === Select Day 1 entry to post ===
+# --- Determine Day 1 to post ---
 day1_to_post = None
 for t in DAY1_PRIORITY:
     entry = day_entries["1"].get(t)
-    if entry and last_id.get("1") != entry.id:
-        day1_to_post = (entry, t)
-        break
+    if entry:
+        last_posted_priority = last_id.get("1_priority", "")
+        # Only post if higher priority or not posted yet
+        if (last_posted_priority == "" or
+            DAY1_PRIORITY.index(t) < DAY1_PRIORITY.index(last_posted_priority)):
+            day1_to_post = (entry, t)
+            break
+        elif last_id.get("1") != entry.id:
+            day1_to_post = (entry, t)
+            break
 
-# === Determine Day 2/3 entries to post ===
+# --- Determine Day 2/3 to post ---
 day2_to_post = day_entries["2"].get("day2")
 day3_to_post = day_entries["3"].get("day3")
-
-# Skip if already posted
 if day2_to_post and last_id.get("2") == day2_to_post.id:
     day2_to_post = None
 if day3_to_post and last_id.get("3") == day3_to_post.id:
     day3_to_post = None
 
-# --- Helper: upload image to GitHub Pages ---
+# --- Helper to upload image to GitHub Pages ---
 def upload_image(filename):
     image_url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
     r = requests.get(image_url)
@@ -78,7 +82,7 @@ def upload_image(filename):
     api_url = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
     headers = {"Authorization": f"token {GH_TOKEN}"}
 
-    # Refresh SHA immediately before PUT
+    # Refresh SHA immediately
     r_check = requests.get(api_url, headers=headers)
     sha = r_check.json().get("sha") if r_check.status_code == 200 else None
 
@@ -98,7 +102,7 @@ def upload_image(filename):
     public_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}?t={int(time.time())}"
     return public_url
 
-# === Prepare Discord embeds ===
+# --- Prepare Discord embeds ---
 embeds = []
 
 # Day 1 embed
@@ -115,9 +119,10 @@ if day1_to_post:
             "color": 16711680
         })
         last_id["1"] = entry.id
+        last_id["1_priority"] = t
         print(f"Prepared Day 1 {t} for posting")
 
-# Day 2/3 embed (combine if both exist)
+# Day 2/3 embed (combined)
 if day2_to_post or day3_to_post:
     description = ""
     for entry, day in [(day2_to_post, "2"), (day3_to_post, "3")]:
@@ -131,7 +136,7 @@ if day2_to_post or day3_to_post:
     })
     print("Prepared Day 2/3 embed for posting")
 
-# === Post to Discord if any embeds exist ===
+# --- Post to Discord ---
 if embeds:
     payload = {"embeds": embeds}
     r_discord = requests.post(WEBHOOK_URL, json=payload)
