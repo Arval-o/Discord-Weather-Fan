@@ -43,12 +43,15 @@ for alert in data.get("features", []):
 
     # Filter by county + type
     if TARGET_COUNTY not in area:
+        print("No warnings in county")
         continue
 
     if event not in TARGET_TYPES:
+        print("No warnings of requested types")
         continue
 
     if alert_id in posted_ids:
+        print("No alert_id")
         continue
 
     # Extract info
