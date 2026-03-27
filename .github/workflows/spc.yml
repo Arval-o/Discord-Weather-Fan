@@ -3,6 +3,11 @@ name: Weather Bots
 on:
   schedule:
     - cron: "0 * * * *"  # Runs every hour
+  workflow_run:
+    workflows: ["Weather Bots"]
+    types:
+      - completed
+  workflow_dispatch: 
 
 permissions:
   contents: write
