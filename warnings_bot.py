@@ -8,9 +8,12 @@ STATE_FILE = "last_warnings.txt"
 URL = "https://api.weather.gov/alerts/active?area=PA"
 
 TARGET_COUNTY = "Allegheny"
-KEYWORDS = ["Tornado Warning", "Severe Thunderstorm Warning"]
+TARGET_TYPES = ["Tornado Warning", "Severe Thunderstorm Warning"]
 
-# Load already posted IDs
+# Optional: put your role ID here (or leave None)
+ROLE_ID = None  # Example: "123456789012345678"
+
+# Load posted alerts
 try:
     with open(STATE_FILE, "r") as f:
         posted_ids = set(f.read().splitlines())
@@ -22,45 +25,79 @@ headers = {
 }
 
 r = requests.get(URL, headers=headers)
+
+if r.status_code != 200:
+    print("Error fetching alerts")
+    exit()
+
 data = r.json()
 
 new_ids = set(posted_ids)
 
-for alert in data["features"]:
+for alert in data.get("features", []):
     props = alert["properties"]
-    
-    alert_id = props["id"]
-    event = props["event"]
-    area = props["areaDesc"]
 
-    # Filter warnings
-    if TARGET_COUNTY in area and event in KEYWORDS:
-        if alert_id in posted_ids:
-            continue
+    alert_id = props.get("id")
+    event = props.get("event", "")
+    area = props.get("areaDesc", "")
 
-        headline = props.get("headline", "Weather Alert")
-        description = props.get("description", "")
-        instruction = props.get("instruction", "")
-        severity = props.get("severity", "Unknown")
+    # Filter by county + type
+    if TARGET_COUNTY not in area:
+        continue
 
-        message = {
-            "content": "@everyone **NEW WARNING**",
-            "embeds": [
-                {
-                    "title": f"{event}",
-                    "description": description[:1000],
-                    "color": 15158332,
-                    "fields": [
-                        {"name": "Area", "value": area, "inline": False},
-                        {"name": "Severity", "value": severity, "inline": True}
-                    ]
-                }
-            ]
-        }
+    if event not in TARGET_TYPES:
+        continue
 
-        requests.post(WEBHOOK_URL, json=message)
+    if alert_id in posted_ids:
+        continue
 
+    # Extract info
+    headline = props.get("headline", event)
+    description = props.get("description", "No description available.")
+    instruction = props.get("instruction", "No instructions provided.")
+    severity = props.get("severity", "Unknown")
+
+    # Trim long text (Discord limit safety)
+    description = description[:900]
+    instruction = instruction[:300]
+
+    # Color + emoji based on type
+    if event == "Tornado Warning":
+        color = 15158332  # red
+        emoji = "🌪️"
+    else:
+        color = 16776960  # yellow
+        emoji = "⛈️"
+
+    # Role ping or everyone
+    if ROLE_ID:
+        content = f"<@&{ROLE_ID}> {emoji} **{event}**"
+    else:
+        content = f"@everyone {emoji} **{event}**"
+
+    embed = {
+        "title": headline,
+        "description": description,
+        "color": color,
+        "fields": [
+            {"name": "Area", "value": area, "inline": False},
+            {"name": "Severity", "value": severity, "inline": True},
+            {"name": "Instructions", "value": instruction, "inline": False}
+        ]
+    }
+
+    payload = {
+        "content": content,
+        "embeds": [embed]
+    }
+
+    response = requests.post(WEBHOOK_URL, json=payload)
+
+    if response.status_code == 204:
+        print(f"Posted: {event}")
         new_ids.add(alert_id)
+    else:
+        print("Discord error:", response.text)
 
 # Save updated IDs
 with open(STATE_FILE, "w") as f:
