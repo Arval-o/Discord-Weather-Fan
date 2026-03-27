@@ -30,7 +30,7 @@ jobs:
 
       - name: Run bots loop (every 1 minute)
         run: |
-          for i in {1..1}
+          for i in {1..30}
           do
             echo "Run #$i"
 
