@@ -15,12 +15,12 @@ STATE_FILE = "last_ids.json"
 
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
-# === Load last posted IDs per day (Day 1, 2, 3 only) ===
+# === Load last posted IDs per day ===
 try:
     with open(STATE_FILE, "r") as f:
         last_ids = json.load(f)
 except FileNotFoundError:
-    last_ids = {}  # e.g., {"1": "id-of-last-day1", "2": "id-of-last-day2", "3": "id-of-last-day3"}
+    last_ids = {}  # keys: "1", "2", "3"
 
 # === Parse RSS feed ===
 feed = feedparser.parse(RSS_URL)
@@ -28,16 +28,18 @@ if not feed.entries:
     print("No entries found")
     exit()
 
-# Reverse feed to post oldest first
+# Process oldest to newest to avoid skipping
 entries = feed.entries[::-1]
 
 for entry in entries:
     title = entry.title.lower()
 
-    # Determine which day this outlook is
+    # Determine day and filename
+    day_key = None
+    filename = None
+
     if "day 1" in title:
         day_key = "1"
-        # Determine which Day 1 version
         if "1300" in title:
             filename = "day1otlk_1300.png"
         elif "1630" in title:
@@ -45,7 +47,7 @@ for entry in entries:
         elif "2000" in title:
             filename = "day1otlk_2000.png"
         else:
-            continue  # skip unknown Day 1 version
+            continue
     elif "day 2" in title:
         day_key = "2"
         filename = "day2otlk.png"
@@ -53,26 +55,25 @@ for entry in entries:
         day_key = "3"
         filename = "day3otlk.png"
     else:
-        # Skip Day 4-8 or any other unknown outlook
-        continue
+        continue  # skip Day 4-8
 
-    # Skip if already posted
+    # Check last posted ID for this day
     if last_ids.get(day_key) == entry.id:
         print(f"Skipping already posted {entry.title}")
         continue
 
     image_url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
 
-    # === Download image ===
+    # Download image
     r = requests.get(image_url)
     if r.status_code != 200:
-        print(f"Error downloading image {filename}")
+        print(f"Error downloading {filename}")
         continue
 
     with open(filename, "wb") as f:
         f.write(r.content)
 
-    # === Upload/update GitHub Pages file ===
+    # Upload/update GitHub Pages
     api_url = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
     headers = {"Authorization": f"token {GH_TOKEN}"}
 
@@ -92,15 +93,12 @@ for entry in entries:
 
     r_put = requests.put(api_url, headers=headers, data=json.dumps(payload))
     if r_put.status_code not in [200, 201]:
-        print("Error uploading to GitHub Pages:", r_put.text)
+        print("GitHub upload failed:", r_put.text)
         os.remove(filename)
         continue
 
-    # === Construct public URL for Discord embed ===
-    base_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}"
-    public_url = f"{base_url}?t={int(time.time())}"
-
-    # === Post to Discord ===
+    # Post to Discord
+    public_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}?t={int(time.time())}"
     embed_data = {
         "embeds": [
             {
@@ -112,17 +110,18 @@ for entry in entries:
             }
         ]
     }
+
     time.sleep(5)
     r_discord = requests.post(WEBHOOK_URL, json=embed_data)
     if r_discord.status_code != 204:
-        print("Error posting to Discord:", r_discord.text)
+        print("Discord post failed:", r_discord.text)
     else:
-        print(f"Successfully posted {entry.title} to Discord")
+        print(f"Posted {entry.title} to Discord")
 
-    # === Update last posted ID for this day only after successful post ===
+    # Update last posted ID only after successful post
     last_ids[day_key] = entry.id
     with open(STATE_FILE, "w") as f:
         json.dump(last_ids, f)
 
-    # === Clean up local file ===
+    # Clean up local file
     os.remove(filename)
