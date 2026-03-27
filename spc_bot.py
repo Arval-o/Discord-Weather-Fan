@@ -3,6 +3,7 @@ import requests
 import os
 import json
 import time
+import base64
 from shapely.geometry import shape, Point
 
 # === CONFIG ===
