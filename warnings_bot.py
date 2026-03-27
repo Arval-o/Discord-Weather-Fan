@@ -12,7 +12,7 @@ TARGET_COUNTY = "Allegheny"
 TARGET_TYPES = ["Tornado Warning", "Severe Thunderstorm Warning"]
 
 # Optional: put your role ID here (or leave None)
-ROLE_ID = None  # Example: "123456789012345678"
+ROLE_ID = "1485401778962043021"  # Example: "123456789012345678"
 
 # Load posted alerts
 try:
@@ -73,10 +73,16 @@ for alert in data.get("features", []):
         emoji = "⛈️"
 
     # Role ping or everyone
-    if ROLE_ID:
-        content = f"<@&{ROLE_ID}> {emoji} **{event}**"
+    if event == "Tornado Warning":
+        content = f"@everyone 🌪️ **TORNADO WARNING**"
+    elif event == "Severe Thunderstorm Warning":
+        if ROLE_ID:
+            content = f"<@&{ROLE_ID}> ⛈️ **Severe Thunderstorm Warning**"
+        else:
+            content = f"@here ⛈️ **Severe Thunderstorm Warning**"
     else:
-        content = f"@everyone {emoji} **{event}**"
+        # Fallback, just no ping
+        content = f"**{event}**"
 
     radar_url = f"https://radar.weather.gov/ridge/standard/KPBZ_loop.gif?t={int(time.time())}"
     embed = {
