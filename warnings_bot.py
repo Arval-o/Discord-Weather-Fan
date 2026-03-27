@@ -75,6 +75,7 @@ for alert in data.get("features", []):
     else:
         content = f"@everyone {emoji} **{event}**"
 
+    radar_url = f"https://radar.weather.gov/ridge/standard/KPBZ_loop.gif?t={int(time.time())}"
     embed = {
         "title": headline,
         "description": description,
@@ -83,9 +84,11 @@ for alert in data.get("features", []):
             {"name": "Area", "value": area, "inline": False},
             {"name": "Severity", "value": severity, "inline": True},
             {"name": "Instructions", "value": instruction, "inline": False}
-        ]
+        ],
+        "image": {
+            "url": radar_url
+        }
     }
-
     payload = {
         "content": content,
         "embeds": [embed]
