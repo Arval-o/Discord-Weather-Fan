@@ -9,216 +9,224 @@ from shapely.geometry import shape, Point
 # === CONFIG ===
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 GH_TOKEN = os.environ["GH_TOKEN"]
+
 REPO = "arval-o/Discord-Weather-Fan"
 BRANCH = "main"
 PAGE_FOLDER = "docs"
+
 STATE_FILE = "last_id.txt"
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
-ROLE_ID = "1485401778962043021"  # ENH/MDT ping
-POINT = Point(-80.096278, 40.615111)  # lon, lat for Allegheny County
+
+ROLE_ID = "1485401778962043021"
+POINT = Point(-80.096278, 40.615111)
 
 DAY1_PRIORITY = ["2000", "1630", "1300"]
 
 RISK_COLORS = {
-    "NONE": 0x808080,    # gray
-    "TSTM": 0x90ee90,    # pale green
-    "MRGL": 0x006400,    # dark green
-    "SLGT": 0xFFFF00,    # yellow
-    "ENH": 0xFFA500,     # orange
-    "MDT": 0xFF0000,     # red
-    "HIGH": 0xFFC0CB     # pink
+    "NONE": 0x808080,
+    "TSTM": 0x90ee90,
+    "MRGL": 0x006400,
+    "SLGT": 0xFFFF00,
+    "ENH": 0xFFA500,
+    "MDT": 0xFF0000,
+    "HIGH": 0xFFC0CB
 }
 
-# === Load last posted IDs / don't-post state ===
+# === LOAD STATE ===
 try:
     with open(STATE_FILE, "r") as f:
         last_id = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
+except:
     last_id = {}
 
-# === Parse RSS feed ===
+# === FETCH RSS ===
 feed = feedparser.parse(RSS_URL)
 entries = feed.entries[::-1]
 
-# --- Organize entries by day ---
 day_entries = {"1": {}, "2": None, "3": None}
+
 for entry in entries:
-    title = entry.title.lower()
-    if "day 1" in title:
-        for t in DAY1_PRIORITY:
-            if t in title:
-                day_entries["1"][t] = entry
-                break
-    elif "day 2" in title:
+    t = entry.title.lower()
+    if "day 1" in t:
+        for p in DAY1_PRIORITY:
+            if p in t:
+                day_entries["1"][p] = entry
+    elif "day 2" in t:
         day_entries["2"] = entry
-    elif "day 3" in title:
+    elif "day 3" in t:
         day_entries["3"] = entry
 
-# --- Select Day 1 to post ---
+# === SELECT DAY 1 ===
 day1_to_post = None
-last_posted_priority = last_id.get("1_priority", "")
-for t in DAY1_PRIORITY:
-    entry = day_entries["1"].get(t)
-    if entry:
-        if last_posted_priority == "" or DAY1_PRIORITY.index(t) < DAY1_PRIORITY.index(last_posted_priority):
-            day1_to_post = (entry, t)
-            break
+last_priority = last_id.get("1_priority", "")
 
-# === Helper: upload image to GitHub Pages ===
+for p in DAY1_PRIORITY:
+    e = day_entries["1"].get(p)
+    if e:
+        if last_priority == "" or DAY1_PRIORITY.index(p) < DAY1_PRIORITY.index(last_priority):
+            if e.id != last_id.get("1"):
+                day1_to_post = (e, p)
+                break
+
+# === IMAGE UPLOAD ===
 def upload_image(filename):
     url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
     r = requests.get(url)
     if r.status_code != 200:
-        print(f"Error downloading {filename}")
         return None
+
     with open(filename, "wb") as f:
         f.write(r.content)
 
-    api_url = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
+    api = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
     headers = {"Authorization": f"token {GH_TOKEN}"}
-    r_check = requests.get(api_url, headers=headers)
+
+    r_check = requests.get(api, headers=headers)
     sha = r_check.json().get("sha") if r_check.status_code == 200 else None
 
     with open(filename, "rb") as f:
-        content_b64 = base64.b64encode(f.read()).decode()
+        content = base64.b64encode(f.read()).decode()
 
-    payload = {"message": f"Update {filename}", "content": content_b64, "branch": BRANCH}
+    payload = {"message": f"update {filename}", "content": content, "branch": BRANCH}
     if sha:
         payload["sha"] = sha
 
-    r_put = requests.put(api_url, headers=headers, data=json.dumps(payload))
+    requests.put(api, headers=headers, data=json.dumps(payload))
     os.remove(filename)
-    if r_put.status_code not in [200, 201]:
-        print("GitHub upload failed:", r_put.text)
-        return None
+
     return f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}?t={int(time.time())}"
 
-# === Helper: extract SPC risk for coordinate ===
-def get_risk_for_point(day, filename_base):
-    geojson_url = f"https://www.spc.noaa.gov/products/outlook/{filename_base}.json"
-    r = requests.get(geojson_url)
+# === RISK LOOKUP ===
+def get_risk(day, base):
+    url = f"https://www.spc.noaa.gov/products/outlook/{base}.json"
+    r = requests.get(url)
+
     if r.status_code != 200:
-        return "NONE", {"tornado": 0, "wind": 0, "hail": 0, "sig_cig": None}
+        return "NONE", {"tornado":0,"wind":0,"hail":0,"sig":None}
 
     data = r.json()
-    risk_level = "NONE"
-    sub_risks = {"tornado": 0, "wind": 0, "hail": 0, "sig_cig": None}
+    risk = "NONE"
+    sub = {"tornado":0,"wind":0,"hail":0,"sig":None}
 
-    for feature in data.get("features", []):
-        props = feature.get("properties", {})
-        category = props.get("category", "")
-        geom = feature.get("geometry")
-        if geom and shape(geom).contains(POINT):
-            if category in ["MRGL","SLGT","ENH","MDT","HIGH","TSTM"]:
-                risk_level = category
+    for f in data.get("features", []):
+        g = f.get("geometry")
+        if g and shape(g).contains(POINT):
+            p = f["properties"]
+            risk = p.get("category","NONE")
+
             if day == 1:
-                sub_risks["tornado"] = props.get("tor2pct", 0)
-                sub_risks["wind"] = props.get("wind10pct", 0)
-                sub_risks["hail"] = props.get("hail2pct", 0)
-                sub_risks["sig_cig"] = props.get("sig", None)
-    return risk_level, sub_risks
+                sub["tornado"] = p.get("tor2pct",0)
+                sub["wind"] = p.get("wind10pct",0)
+                sub["hail"] = p.get("hail2pct",0)
+                sub["sig"] = p.get("sig",None)
 
-# === Prepare embeds ===
+    return risk, sub
+
+# === BUILD EMBEDS ===
 embeds = []
-content_to_post = ""  # always define
+content = ""
 
-# --- Day 1 ---
+# --- DAY 1 ---
 if day1_to_post:
-    entry, t = day1_to_post
-    filename = f"day1otlk_{t}.png"
-    url = upload_image(filename)
-    if url:
-        risk, sub_risks = get_risk_for_point(1, f"day1otlk_{t}")
-        color = RISK_COLORS.get(risk, 0x808080)
-        # Ping logic
+    e, p = day1_to_post
+    img = upload_image(f"day1otlk_{p}.png")
+
+    if img:
+        risk, sub = get_risk(1, f"day1otlk_{p}")
+
         if risk in ["ENH","MDT"]:
-            content_to_post = f"<@&{ROLE_ID}>"
+            content = f"<@&{ROLE_ID}>"
         elif risk == "HIGH":
-            content_to_post = "@everyone"
+            content = "@everyone"
 
-        tor = sub_risks.get("tornado", 0)
-        wind = sub_risks.get("wind", 0)
-        hail = sub_risks.get("hail", 0)
-        sig = sub_risks.get("sig_cig", None)
+        tor = sub["tornado"]
+        wind = sub["wind"]
+        hail = sub["hail"]
+        sig = sub["sig"]
 
-        # Build sub-risk text
-        sub_text_parts = []
-        no_risks = []
-        if tor == 0: no_risks.append("tornado")
-        else: sub_text_parts.append(f"**Tornado: {tor}%**" if tor>=10 or (tor>=5 and sig and sig>=1) else f"Tornado: {tor}%")
-        if wind == 0: no_risks.append("wind")
-        else: sub_text_parts.append(f"**Wind: {wind}%**" if wind>=30 or (wind>=15 and sig and sig>=1) else f"Wind: {wind}%")
-        if hail == 0: no_risks.append("hail")
-        else: sub_text_parts.append(f"**Hail: {hail}%**" if hail>=30 or (hail>=15 and sig and sig>=1) else f"Hail: {hail}%")
-        if len(no_risks)==3:
-            sub_text_parts.append("No tornado, wind, or hail risk.")
-        elif len(no_risks)>0:
-            sub_text_parts.append(f"No {' and '.join(no_risks)} risk.")
-        sub_text = "\n".join(sub_text_parts)
+        text = []
+        none = []
+
+        if tor == 0: none.append("tornado")
+        else: text.append(f"**Tornado: {tor}%**" if tor>=10 or (tor>=5 and sig) else f"Tornado: {tor}%")
+
+        if wind == 0: none.append("wind")
+        else: text.append(f"**Wind: {wind}%**" if wind>=30 or (wind>=15 and sig) else f"Wind: {wind}%")
+
+        if hail == 0: none.append("hail")
+        else: text.append(f"**Hail: {hail}%**" if hail>=30 or (hail>=15 and sig) else f"Hail: {hail}%")
+
+        if len(none)==3:
+            text.append("No tornado, wind, or hail risk.")
+        elif none:
+            text.append(f"No {' and '.join(none)} risk.")
 
         embeds.append({
-            "title": entry.title,
-            "url": entry.link,
-            "description": f"SPC Day 1 Convective Outlook\nRisk: {risk}\n{sub_text}",
-            "color": color,
-            "image": {"url": url}
+            "title": e.title,
+            "url": e.link,
+            "description": f"Risk: {risk}\n" + "\n".join(text),
+            "color": RISK_COLORS.get(risk,0x808080),
+            "image": {"url": img}
         })
-        last_id["1"] = entry.id
-        last_id["1_priority"] = t
-        print(f"Prepared Day 1 {t} for posting")
 
-# --- Day 2 & 3 combined as thumbnails ---
-day2_embed = None
-day3_embed = None
+        last_id["1"] = e.id
+        last_id["1_priority"] = p
+        print("Posted Day 1")
 
-if day_entries["2"]:
-    entry2 = day_entries["2"]
-    fn2 = "day2otlk.png"
-    url2 = upload_image(fn2)
-    if url2:
-        risk2, _ = get_risk_for_point(2, "day2otlk")
-        color2 = RISK_COLORS.get(risk2, 0x808080)
-        day2_embed = {
-            "title": entry2.title,
-            "url": entry2.link,
-            "description": f"SPC Day 2 Convective Outlook\nRisk: {risk2}",
-            "color": color2,
-            "thumbnail": {"url": url2}
-        }
-        last_id["2"] = entry2.id
-        print("Prepared Day 2 embed with thumbnail")
+# --- DAY 2/3 COMBINED ---
+d2 = day_entries["2"]
+d3 = day_entries["3"]
 
-if day_entries["3"]:
-    entry3 = day_entries["3"]
-    fn3 = "day3otlk.png"
-    url3 = upload_image(fn3)
-    if url3:
-        risk3, _ = get_risk_for_point(3, "day3otlk")
-        color3 = RISK_COLORS.get(risk3, 0x808080)
-        day3_embed = {
-            "title": entry3.title,
-            "url": entry3.link,
-            "description": f"SPC Day 3 Convective Outlook\nRisk: {risk3}",
-            "color": color3,
-            "thumbnail": {"url": url3}
-        }
-        last_id["3"] = entry3.id
-        print("Prepared Day 3 embed with thumbnail")
+if d2 and d3:
+    if d2.id != last_id.get("2") and d3.id != last_id.get("3"):
 
-# Append Day 2/3 embeds after Day 1 (if exist)
-if day2_embed:
-    embeds.append(day2_embed)
-if day3_embed:
-    embeds.append(day3_embed)
+        img2 = upload_image("day2otlk.png")
+        img3 = upload_image("day3otlk.png")
 
-# --- Post to Discord ---
-if embeds:
-    r_discord = requests.post(WEBHOOK_URL, json={"content": content_to_post, "embeds": embeds})
-    if r_discord.status_code == 204:
-        print("Posted embed(s) to Discord")
-        with open(STATE_FILE, "w") as f:
-            json.dump(last_id, f)
+        if img2 and img3:
+            r2,_ = get_risk(2,"day2otlk")
+            r3,_ = get_risk(3,"day3otlk")
+
+            # ping logic
+            if not content:
+                if r2 in ["ENH","MDT"]:
+                    content = f"<@&{ROLE_ID}>"
+                elif r2 == "HIGH":
+                    content = "@everyone"
+
+            embeds.append({
+                "title": "SPC Day 2 Outlook",
+                "url": d2.link,
+                "description": f"Risk: {r2}",
+                "color": RISK_COLORS.get(r2,0x808080),
+                "thumbnail": {"url": img2}
+            })
+
+            embeds.append({
+                "title": "SPC Day 3 Outlook",
+                "url": d3.link,
+                "description": f"Risk: {r3}",
+                "color": RISK_COLORS.get(r3,0x808080),
+                "thumbnail": {"url": img3}
+            })
+
+            last_id["2"] = d2.id
+            last_id["3"] = d3.id
+
+            print("Posted Day 2/3 (combined)")
+
     else:
-        print("Discord post failed:", r_discord.text)
+        print("Skipping Day 2/3 (not both new)")
+
+# === SEND ===
+if embeds:
+    r = requests.post(WEBHOOK_URL, json={"content": content, "embeds": embeds})
+
+    if r.status_code == 204:
+        with open(STATE_FILE,"w") as f:
+            json.dump(last_id,f)
+        print("Posted to Discord")
+    else:
+        print("Discord error:", r.text)
 else:
-    print("No new outlooks to post")
+    print("Nothing to post")
