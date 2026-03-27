@@ -63,12 +63,11 @@ for alert in data.get("features", []):
     # Extract info
     headline = props.get("headline", event)
     description = props.get("description", "No description available.")
+    description = " ".join(description.split())[:800]
     instruction = props.get("instruction", "No instructions provided.")
+    instruction = " ".join(instruction.split())[:500]
     severity = props.get("severity", "Unknown")
 
-    # Trim long text (Discord limit safety)
-    description = description[:900]
-    instruction = instruction[:300]
 
     # Color + emoji based on type
     if event == "Tornado Warning":
