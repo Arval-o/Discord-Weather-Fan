@@ -51,4 +51,4 @@ jobs:
           git commit -m "Update bot state files" || echo "No changes to commit"
       
           # Push using GH_TOKEN for authentication
-          git push https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:${GITHUB_REF} || echo "Nothing to push"
+          git push https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:main
