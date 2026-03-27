@@ -80,7 +80,7 @@ if r_put.status_code not in [200, 201]:
     exit()
 
 # Public URL for embed
-public_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{PAGE_FOLDER}/{filename}"
+public_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}"
 
 # Post to Discord
 embed_data = {
