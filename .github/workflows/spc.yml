@@ -2,8 +2,7 @@ name: Weather Bots
 
 on:
   schedule:
-    - cron: "*/5 * * * *"  # Runs every 5 minutes (GitHub limit)
-  workflow_dispatch:       # Allows manual run
+    - cron: "0 * * * *"  # Runs every hour
 
 permissions:
   contents: write
@@ -29,7 +28,7 @@ jobs:
 
       - name: Run bots loop (every 1 minute)
         run: |
-          for i in {1..60}
+          for i in {1..59}
           do
             echo "Run #$i"
 
