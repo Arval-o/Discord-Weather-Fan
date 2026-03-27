@@ -5,6 +5,9 @@ on:
     - cron: "*/5 * * * *"  # Runs every 5 minutes (GitHub limit)
   workflow_dispatch:       # Allows manual run
 
+permissions:
+  contents: write
+
 jobs:
   run-bots:
     runs-on: ubuntu-latest
