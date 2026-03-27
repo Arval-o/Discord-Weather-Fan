@@ -91,7 +91,7 @@ def upload_image(filename):
 # --- Prepare embeds ---
 embeds = []
 
-# Day 1
+# Day 1 embed
 if day1_to_post:
     entry, t = day1_to_post
     filename = f"day1otlk_{t}.png"
@@ -100,7 +100,7 @@ if day1_to_post:
         embeds.append({
             "title": entry.title,
             "url": entry.link,
-            "description": "SPC Convective Outlook",
+            "description": "SPC Day 1 Convective Outlook",
             "color": 16711680,
             "image": {"url": url}
         })
@@ -108,36 +108,30 @@ if day1_to_post:
         last_id["1_priority"] = t
         print(f"Prepared Day 1 {t} for posting")
 
-# Day 2/3 combined
+# Day 2/3 embed with small images
 if day2_to_post or day3_to_post:
-    fields = []
-    main_image = None
-    thumbnail_image = None
-
+    description = ""
     if day2_to_post:
         fn2 = "day2otlk.png"
-        main_image = upload_image(fn2)
-        fields.append({"name": "Day 2", "value": f"[{day2_to_post.title}]({day2_to_post.link})", "inline": False})
+        url2 = upload_image(fn2)
+        description += f"**Day 2 Outlook**\n[{day2_to_post.title}]({day2_to_post.link})\n"
+        if url2:
+            description += f"![Day 2]({url2})\n\n"
         last_id["2"] = day2_to_post.id
-
     if day3_to_post:
         fn3 = "day3otlk.png"
-        thumbnail_image = upload_image(fn3)
-        fields.append({"name": "Day 3", "value": f"[{day3_to_post.title}]({day3_to_post.link})", "inline": False})
+        url3 = upload_image(fn3)
+        description += f"**Day 3 Outlook**\n[{day3_to_post.title}]({day3_to_post.link})\n"
+        if url3:
+            description += f"![Day 3]({url3})\n\n"
         last_id["3"] = day3_to_post.id
 
-    embed = {
+    embeds.append({
         "title": "SPC Day 2/3 Outlook",
-        "color": 65280,
-        "fields": fields,
-    }
-    if main_image:
-        embed["image"] = {"url": main_image}
-    if thumbnail_image:
-        embed["thumbnail"] = {"url": thumbnail_image}
-
-    embeds.append(embed)
-    print("Prepared Day 2/3 embed with images")
+        "description": description.strip(),
+        "color": 65280
+    })
+    print("Prepared Day 2/3 embed with small images")
 
 # --- Post to Discord ---
 if embeds:
