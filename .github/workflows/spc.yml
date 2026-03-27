@@ -42,6 +42,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add last_warnings.txt last_outlook.txt
+          git add last_warnings.txt last_id.txt
           git commit -m "Update bot state files" || echo "No changes to commit"
           git push
