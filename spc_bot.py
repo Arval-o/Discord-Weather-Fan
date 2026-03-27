@@ -18,9 +18,10 @@ RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 # === Load last posted IDs per day ===
 try:
     with open(STATE_FILE, "r") as f:
-        last_id = json.load(f)
-except FileNotFoundError:
-    last_id = {}  # keys: "1", "2", "3"
+        content = f.read().strip()
+        last_id = json.loads(content) if content else {}
+except (FileNotFoundError, json.JSONDecodeError):
+    last_id = {}
 
 # === Parse RSS feed ===
 feed = feedparser.parse(RSS_URL)
