@@ -220,7 +220,13 @@ if d2 and d3:
 
 # === SEND ===
 if embeds:
-    r = requests.post(WEBHOOK_URL, json={"content": content, "embeds": embeds})
+    MY_ID = "1109224984984956968"
+
+    final_content = f"<@{MY_ID}>"
+    if content:
+        final_content += f" {content}"
+    
+    r = requests.post(WEBHOOK_URL, json={"content": final_content, "embeds": embeds})
 
     if r.status_code == 204:
         with open(STATE_FILE,"w") as f:
