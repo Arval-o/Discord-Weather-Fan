@@ -11,16 +11,16 @@ GH_TOKEN = os.environ["GH_TOKEN"]
 REPO = "arval-o/Discord-Weather-Fan"
 BRANCH = "main"
 PAGE_FOLDER = "docs"
-STATE_FILE = "last_ids.json"
+STATE_FILE = "last_id.json"
 
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
 # === Load last posted IDs per day ===
 try:
     with open(STATE_FILE, "r") as f:
-        last_ids = json.load(f)
+        last_id = json.load(f)
 except FileNotFoundError:
-    last_ids = {}  # keys: "1", "2", "3"
+    last_id = {}  # keys: "1", "2", "3"
 
 # === Parse RSS feed ===
 feed = feedparser.parse(RSS_URL)
@@ -58,7 +58,7 @@ for entry in entries:
         continue  # skip Day 4-8
 
     # Check last posted ID for this day
-    if last_ids.get(day_key) == entry.id:
+    if last_id.get(day_key) == entry.id:
         print(f"Skipping already posted {entry.title}")
         continue
 
@@ -119,9 +119,9 @@ for entry in entries:
         print(f"Posted {entry.title} to Discord")
 
     # Update last posted ID only after successful post
-    last_ids[day_key] = entry.id
+    last_id[day_key] = entry.id
     with open(STATE_FILE, "w") as f:
-        json.dump(last_ids, f)
+        json.dump(last_id, f)
 
     # Clean up local file
     os.remove(filename)
