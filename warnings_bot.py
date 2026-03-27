@@ -3,16 +3,16 @@ import os
 import json
 import time
 
+# === CONFIG ===
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 STATE_FILE = "last_warnings.txt"
-
 URL = "https://api.weather.gov/alerts/active?area=PA"
 
 TARGET_COUNTY = "Allegheny"
-ROLE_ID = "1485401778962043021"  # your Discord role
-MIN_LATITUDE = 40.55  # roughly northern Allegheny County
+ROLE_ID = "1485401778962043021"  # Discord role for Severe Thunderstorm
+MIN_LATITUDE = 40.55  # Optional: north of this latitude only
 
-# Load posted alerts
+# === Load posted alerts ===
 try:
     with open(STATE_FILE, "r") as f:
         posted_ids = set(f.read().splitlines())
@@ -41,35 +41,32 @@ for alert in data.get("features", []):
     if TARGET_COUNTY not in area:
         continue
 
-    
+    # --- Optional: northern latitude filter ---
     geometry = alert.get("geometry")
-    # Check if any coordinate in the polygon is north of MIN_LATITUDE
     north_filter_pass = True
     if geometry and geometry.get("coordinates"):
         coords_list = []
         if geometry["type"] == "Polygon":
-            # Flatten all points in the polygon
             coords_list = [pt for ring in geometry["coordinates"] for pt in ring]
         elif geometry["type"] == "MultiPolygon":
-            # Flatten all points in all polygons
             coords_list = [pt for poly in geometry["coordinates"] for ring in poly for pt in ring]
         else:
             coords_list = [geometry["coordinates"]]
-    
-        # Check if any latitude is above MIN_LATITUDE
+
+        # Pass if any coordinate is north of MIN_LATITUDE
         north_filter_pass = any(pt[1] >= MIN_LATITUDE for pt in coords_list)
-    
+
     if not north_filter_pass:
         continue
 
     if alert_id in posted_ids:
         continue
 
-    # --- Clean up text ---
-    headline = props.get("headline", event)
-    description = " ".join(props.get("description", "No description available.").split())[:800]
-    instruction = " ".join(props.get("instruction", "No instructions provided.").split())[:500]
-    severity = props.get("severity", "Unknown")
+    # --- Clean text safely ---
+    headline = props.get("headline") or event
+    description = " ".join((props.get("description") or "No description available.").split())[:800]
+    instruction = " ".join((props.get("instruction") or "No instructions provided.").split())[:500]
+    severity = props.get("severity") or "Unknown"
 
     # --- Color + emoji ---
     if event == "Tornado Warning":
@@ -82,17 +79,21 @@ for alert in data.get("features", []):
         color = 3447003  # blue-ish for others
         emoji = "⚠️"
 
-    # --- Decide who to ping ---
+    # --- Ping logic ---
     if event == "Tornado Warning":
         content = f"@everyone {emoji} **{event}**"
     elif event == "Severe Thunderstorm Warning":
-        content = f"<@&{ROLE_ID}> {emoji} **{event}**"
+        if ROLE_ID:
+            content = f"<@&{ROLE_ID}> {emoji} **{event}**"
+        else:
+            content = f"@here {emoji} **{event}**"
     else:
-        content = f"{emoji} **{event}**"  # other warnings no ping
+        content = f"{emoji} **{event}**"
 
-    # --- Radar ---
+    # --- Radar URL (auto-refresh) ---
     radar_url = f"https://radar.weather.gov/ridge/standard/KPBZ_loop.gif?t={int(time.time())}"
 
+    # --- Build embed ---
     embed = {
         "title": headline,
         "description": description,
@@ -115,6 +116,6 @@ for alert in data.get("features", []):
     else:
         print("Discord error:", response.text)
 
-# Save updated IDs
+# === Save posted IDs ===
 with open(STATE_FILE, "w") as f:
     f.write("\n".join(new_ids))
