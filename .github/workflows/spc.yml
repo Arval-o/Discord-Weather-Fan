@@ -53,7 +53,7 @@ jobs:
           git add last_warnings.txt last_id.txt
           git commit -m "Update bot state files" || echo "No changes to commit"
           
-          # 🔑 Sync with remote before pushing
+          # Sync with remote before pushing
           git pull --rebase origin main
           
           git push https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:main
