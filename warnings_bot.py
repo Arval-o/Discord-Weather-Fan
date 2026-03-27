@@ -1,6 +1,7 @@
 import requests
 import os
 import json
+import time
 
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 STATE_FILE = "last_warnings.txt"
