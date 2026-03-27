@@ -3,6 +3,7 @@ import requests
 import os
 import json
 import base64
+import time
 
 # === CONFIGURATION ===
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
@@ -96,7 +97,8 @@ if r_put.status_code not in [200, 201]:
     exit()
 
 # === Construct public URL for Discord embed ===
-public_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}"
+base_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}"
+public_url = f"{base_url}?t={int(time.time())}"
 
 # === Post to Discord ===
 embed_data = {
@@ -110,7 +112,7 @@ embed_data = {
         }
     ]
 }
-
+time.sleep(10)
 r_discord = requests.post(WEBHOOK_URL, json=embed_data)
 if r_discord.status_code != 204:
     print("Error posting to Discord:", r_discord.text)
