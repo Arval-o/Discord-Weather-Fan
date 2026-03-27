@@ -1,0 +1,19 @@
+name: Watchdog
+
+on:
+  workflow_run:
+    workflows: ["Weather Bots"]
+    types:
+      - completed
+
+jobs:
+  restart_weather_bots:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Trigger Weather Bots
+        uses: peter-evans/workflow-dispatch@v1
+        with:
+          workflow: Weather Bots
+          repo: ${{ github.repository }}
+          ref: main
