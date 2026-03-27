@@ -14,25 +14,19 @@ PAGE_FOLDER = "docs"
 STATE_FILE = "last_id.txt"
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
-# Day 1 priority (high → low)
 DAY1_PRIORITY = ["2000", "1630", "1300"]
 
-# === Load last posted state ===
+# --- Load last state ---
 try:
     with open(STATE_FILE, "r") as f:
         last_id = json.load(f)
 except (FileNotFoundError, json.JSONDecodeError):
-    last_id = {}  # {"1": "<id>", "1_priority": "2000", "2": "<id>", "3": "<id>"}
+    last_id = {}
 
-# === Parse RSS feed ===
+# --- Parse RSS feed ---
 feed = feedparser.parse(RSS_URL)
-if not feed.entries:
-    print("No entries found")
-    exit()
+entries = feed.entries[::-1]
 
-entries = feed.entries[::-1]  # oldest first
-
-# --- Separate entries by day ---
 day_entries = {"1": {}, "2": {}, "3": {}}
 for entry in entries:
     title = entry.title.lower()
@@ -46,23 +40,17 @@ for entry in entries:
     elif "day 3" in title:
         day_entries["3"]["day3"] = entry
 
-# --- Determine Day 1 to post ---
+# --- Day 1 selection ---
 day1_to_post = None
 last_posted_priority = last_id.get("1_priority", "")
 for t in DAY1_PRIORITY:
     entry = day_entries["1"].get(t)
     if entry:
-        # Only post if higher priority than last posted or nothing posted yet
-        if last_posted_priority == "":
+        if last_posted_priority == "" or DAY1_PRIORITY.index(t) < DAY1_PRIORITY.index(last_posted_priority):
             day1_to_post = (entry, t)
             break
-        elif DAY1_PRIORITY.index(t) < DAY1_PRIORITY.index(last_posted_priority):
-            day1_to_post = (entry, t)
-            break
-        else:
-            continue  # lower or equal priority → skip
 
-# --- Determine Day 2/3 to post ---
+# --- Day 2/3 selection ---
 day2_to_post = day_entries["2"].get("day2")
 day3_to_post = day_entries["3"].get("day3")
 if day2_to_post and last_id.get("2") == day2_to_post.id:
@@ -70,10 +58,10 @@ if day2_to_post and last_id.get("2") == day2_to_post.id:
 if day3_to_post and last_id.get("3") == day3_to_post.id:
     day3_to_post = None
 
-# --- Helper: Upload image to GitHub Pages ---
+# --- Upload helper ---
 def upload_image(filename):
-    image_url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
-    r = requests.get(image_url)
+    url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
+    r = requests.get(url)
     if r.status_code != 200:
         print(f"Error downloading {filename}")
         return None
@@ -82,8 +70,6 @@ def upload_image(filename):
 
     api_url = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
     headers = {"Authorization": f"token {GH_TOKEN}"}
-
-    # Refresh SHA before PUT
     r_check = requests.get(api_url, headers=headers)
     sha = r_check.json().get("sha") if r_check.status_code == 200 else None
 
@@ -100,50 +86,64 @@ def upload_image(filename):
         print("GitHub upload failed:", r_put.text)
         return None
 
-    public_url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}?t={int(time.time())}"
-    return public_url
+    return f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}?t={int(time.time())}"
 
-# --- Prepare Discord embeds ---
+# --- Prepare embeds ---
 embeds = []
 
-# Day 1 embed
+# Day 1
 if day1_to_post:
     entry, t = day1_to_post
     filename = f"day1otlk_{t}.png"
-    public_url = upload_image(filename)
-    if public_url:
+    url = upload_image(filename)
+    if url:
         embeds.append({
             "title": entry.title,
             "url": entry.link,
-            "image": {"url": public_url},
             "description": "SPC Convective Outlook",
-            "color": 16711680
+            "color": 16711680,
+            "image": {"url": url}
         })
         last_id["1"] = entry.id
         last_id["1_priority"] = t
         print(f"Prepared Day 1 {t} for posting")
 
-# Day 2/3 combined embed
+# Day 2/3 combined
 if day2_to_post or day3_to_post:
-    description = ""
-    for entry, day in [(day2_to_post, "2"), (day3_to_post, "3")]:
-        if entry:
-            description += f"**Day {day} Convective Outlook**\n[{entry.title}]({entry.link})\n\n"
-            last_id[day] = entry.id
-    embeds.append({
+    fields = []
+    main_image = None
+    thumbnail_image = None
+
+    if day2_to_post:
+        fn2 = "day2otlk.png"
+        main_image = upload_image(fn2)
+        fields.append({"name": "Day 2", "value": f"[{day2_to_post.title}]({day2_to_post.link})", "inline": False})
+        last_id["2"] = day2_to_post.id
+
+    if day3_to_post:
+        fn3 = "day3otlk.png"
+        thumbnail_image = upload_image(fn3)
+        fields.append({"name": "Day 3", "value": f"[{day3_to_post.title}]({day3_to_post.link})", "inline": False})
+        last_id["3"] = day3_to_post.id
+
+    embed = {
         "title": "SPC Day 2/3 Outlook",
-        "description": description.strip(),
-        "color": 65280
-    })
-    print("Prepared Day 2/3 embed for posting")
+        "color": 65280,
+        "fields": fields,
+    }
+    if main_image:
+        embed["image"] = {"url": main_image}
+    if thumbnail_image:
+        embed["thumbnail"] = {"url": thumbnail_image}
+
+    embeds.append(embed)
+    print("Prepared Day 2/3 embed with images")
 
 # --- Post to Discord ---
 if embeds:
-    payload = {"embeds": embeds}
-    r_discord = requests.post(WEBHOOK_URL, json=payload)
+    r_discord = requests.post(WEBHOOK_URL, json={"embeds": embeds})
     if r_discord.status_code == 204:
         print("Posted embed(s) to Discord")
-        # Update state to prevent repeated pings
         with open(STATE_FILE, "w") as f:
             json.dump(last_id, f)
     else:
