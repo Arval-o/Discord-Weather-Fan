@@ -1,10 +1,10 @@
 name: Weather Bots
 
 on:
-  #schedule:
-  #  - cron: "0 * * * *"  
-  workflow_dispatch: 
-
+  workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-spc]
+    
 permissions:
   contents: write
 
@@ -30,7 +30,7 @@ jobs:
 
       - name: Run bots loop (every 1 minute)
         run: |
-          for i in {1..59}
+          for i in {1..1}
           do
             echo "Run #$i"
 
