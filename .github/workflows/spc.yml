@@ -3,10 +3,6 @@ name: Weather Bots
 on:
   schedule:
     - cron: "0 * * * *"  # Runs every hour
-  workflow_run:
-    workflows: ["Weather Bots"]
-    types:
-      - completed
   workflow_dispatch: 
 
 permissions:
@@ -61,3 +57,4 @@ jobs:
           git pull --rebase origin main
           
           git push https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:main
+          
