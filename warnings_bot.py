@@ -43,13 +43,22 @@ for alert in data.get("features", []):
 
     
     geometry = alert.get("geometry")
+    # Check if any coordinate in the polygon is north of MIN_LATITUDE
     north_filter_pass = True
     if geometry and geometry.get("coordinates"):
-        # Take first coordinate (most warnings are polygons)
-        coords = geometry["coordinates"][0][0] if geometry["type"] == "Polygon" else geometry["coordinates"]
-        lat = coords[1] if isinstance(coords[0], list) else coords[1]
-        if lat < MIN_LATITUDE:
-            north_filter_pass = False
+        coords_list = []
+        if geometry["type"] == "Polygon":
+            # Flatten all points in the polygon
+            coords_list = [pt for ring in geometry["coordinates"] for pt in ring]
+        elif geometry["type"] == "MultiPolygon":
+            # Flatten all points in all polygons
+            coords_list = [pt for poly in geometry["coordinates"] for ring in poly for pt in ring]
+        else:
+            coords_list = [geometry["coordinates"]]
+    
+        # Check if any latitude is above MIN_LATITUDE
+        north_filter_pass = any(pt[1] >= MIN_LATITUDE for pt in coords_list)
+    
     if not north_filter_pass:
         continue
 
