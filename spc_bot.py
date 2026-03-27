@@ -91,7 +91,7 @@ def upload_image(filename):
 # --- Prepare embeds ---
 embeds = []
 
-# Day 1 embed
+# Day 1 full-size embed
 if day1_to_post:
     entry, t = day1_to_post
     filename = f"day1otlk_{t}.png"
@@ -108,30 +108,35 @@ if day1_to_post:
         last_id["1_priority"] = t
         print(f"Prepared Day 1 {t} for posting")
 
-# Day 2/3 embed with small images
-if day2_to_post or day3_to_post:
-    description = ""
-    if day2_to_post:
-        fn2 = "day2otlk.png"
-        url2 = upload_image(fn2)
-        description += f"**Day 2 Outlook**\n[{day2_to_post.title}]({day2_to_post.link})\n"
-        if url2:
-            description += f"![Day 2]({url2})\n\n"
+# Day 2 embed
+if day2_to_post:
+    fn2 = "day2otlk.png"
+    url2 = upload_image(fn2)
+    if url2:
+        embeds.append({
+            "title": day2_to_post.title,
+            "url": day2_to_post.link,
+            "description": "SPC Day 2 Convective Outlook",
+            "color": 65280,
+            "thumbnail": {"url": url2}  # small image
+        })
         last_id["2"] = day2_to_post.id
-    if day3_to_post:
-        fn3 = "day3otlk.png"
-        url3 = upload_image(fn3)
-        description += f"**Day 3 Outlook**\n[{day3_to_post.title}]({day3_to_post.link})\n"
-        if url3:
-            description += f"![Day 3]({url3})\n\n"
-        last_id["3"] = day3_to_post.id
+        print("Prepared Day 2 embed with thumbnail")
 
-    embeds.append({
-        "title": "SPC Day 2/3 Outlook",
-        "description": description.strip(),
-        "color": 65280
-    })
-    print("Prepared Day 2/3 embed with small images")
+# Day 3 embed
+if day3_to_post:
+    fn3 = "day3otlk.png"
+    url3 = upload_image(fn3)
+    if url3:
+        embeds.append({
+            "title": day3_to_post.title,
+            "url": day3_to_post.link,
+            "description": "SPC Day 3 Convective Outlook",
+            "color": 65280,
+            "thumbnail": {"url": url3}  # small image
+        })
+        last_id["3"] = day3_to_post.id
+        print("Prepared Day 3 embed with thumbnail")
 
 # --- Post to Discord ---
 if embeds:
