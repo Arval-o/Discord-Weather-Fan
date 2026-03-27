@@ -15,7 +15,7 @@ STATE_FILE = "last_id.txt"
 
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
-# === Load last posted IDs per day ===
+# === Load last posted IDs per day (also acts as don't-post list) ===
 try:
     with open(STATE_FILE, "r") as f:
         content = f.read().strip()
@@ -29,39 +29,56 @@ if not feed.entries:
     print("No entries found")
     exit()
 
-# Process oldest to newest to avoid skipping
-entries = feed.entries[::-1]
+# === Collect newest entries per day ===
+newest_per_day = {}
 
-for entry in entries:
-    title = entry.title.lower()
+# Day 1 priority: post only the latest time (2000 > 1630 > 1300)
+day1_priority = ["2000", "1630", "1300"]
 
-    # Determine day and filename
+for entry in feed.entries:
+    title_lower = entry.title.lower()
     day_key = None
     filename = None
 
-    if "day 1" in title:
+    if "day 1" in title_lower:
         day_key = "1"
-        if "1300" in title:
-            filename = "day1otlk_1300.png"
-        elif "1630" in title:
-            filename = "day1otlk_1630.png"
-        elif "2000" in title:
-            filename = "day1otlk_2000.png"
-        else:
-            continue
-    elif "day 2" in title:
+        for t in day1_priority:
+            if t in title_lower:
+                filename = f"day1otlk_{t}.png"
+                break
+    elif "day 2" in title_lower:
         day_key = "2"
         filename = "day2otlk.png"
-    elif "day 3" in title:
+    elif "day 3" in title_lower:
         day_key = "3"
         filename = "day3otlk.png"
     else:
         continue  # skip Day 4-8
 
-    # Check last posted ID for this day
-    if last_id.get(day_key) == entry.id:
-        print(f"Skipping already posted {entry.title}")
+    if not filename:
         continue
+
+    # Skip if in last_id (acts as don't-post list)
+    if last_id.get(day_key) == entry.id:
+        print(f"Skipping {entry.title} (already posted / don't post)")
+        continue
+
+    # For Day 1, keep only the highest-priority outlook
+    if day_key in newest_per_day:
+        if day_key == "1":
+            current_priority = day1_priority.index(filename.split("_")[1].split(".")[0])
+            existing_priority = day1_priority.index(newest_per_day[day_key]['filename'].split("_")[1].split(".")[0])
+            if current_priority <= existing_priority:
+                continue  # keep higher priority one
+        else:
+            continue  # Day 2/3: keep first found
+
+    newest_per_day[day_key] = {"entry": entry, "filename": filename}
+
+# === Post newest entries per day ===
+for day_key, data in newest_per_day.items():
+    entry = data["entry"]
+    filename = data["filename"]
 
     image_url = f"https://www.spc.noaa.gov/products/outlook/{filename}"
 
@@ -119,7 +136,7 @@ for entry in entries:
     else:
         print(f"Posted {entry.title} to Discord")
 
-    # Update last posted ID only after successful post
+    # Update last posted ID (acts as don't-post record)
     last_id[day_key] = entry.id
     with open(STATE_FILE, "w") as f:
         json.dump(last_id, f)
