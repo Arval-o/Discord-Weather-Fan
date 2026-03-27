@@ -102,7 +102,7 @@ for alert in data.get("features", []):
             {"name": "Area", "value": area, "inline": False},
             {"name": "Severity", "value": severity, "inline": True},
             {"name": "Instructions", "value": instruction, "inline": False},
-            {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/region/east/standard)", "inline": False}
+            {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/station/kpbz/standard)", "inline": False}
         ],
         "image": {"url": radar_url}
     }
