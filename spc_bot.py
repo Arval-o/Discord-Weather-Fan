@@ -112,7 +112,7 @@ for entry in entries:
         ]
     }
 
-    time.sleep(5)
+    time.sleep(10)
     r_discord = requests.post(WEBHOOK_URL, json=embed_data)
     if r_discord.status_code != 204:
         print("Discord post failed:", r_discord.text)
