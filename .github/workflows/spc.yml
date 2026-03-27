@@ -1,8 +1,8 @@
 name: Weather Bots
 
 on:
-  schedule:
-    - cron: "0 * * * *"  # Runs every hour
+  #schedule:
+  #  - cron: "0 * * * *"  
   workflow_dispatch: 
 
 permissions:
