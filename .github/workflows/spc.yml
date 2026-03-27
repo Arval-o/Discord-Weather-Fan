@@ -46,6 +46,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add last_warnings.txt last_outlook.txt
+          git add last_warnings.txt last_id.txt
           git commit -m "Update bot state files" || echo "No changes to commit"
           git push https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:${GITHUB_REF} || echo "Nothing to push"
