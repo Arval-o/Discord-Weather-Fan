@@ -18,7 +18,7 @@ STATE_FILE = "last_id.txt"
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
 ROLE_ID = "1485401778962043021"
-POINT = Point(-80.096278, 40.615111)
+POINT = Point(40.615111, -80.096278)
 
 DAY1_PRIORITY = ["2000", "1630", "1300"]
 
