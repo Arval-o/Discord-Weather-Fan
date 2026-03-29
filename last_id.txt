@@ -1,1 +1,1 @@
-{"1": "https://www.spc.noaa.gov/products/outlook/day1otlk_2000.html/202603272118", "2": "https://www.spc.noaa.gov/products/outlook/day2otlk_1730.html/202603292113", "1_priority": "2000", "3": "https://www.spc.noaa.gov/products/outlook/day3otlk_1930.html/202603292113"}
+{"1": "https://www.spc.noaa.gov/products/outlook/day1otlk_2000.html/202603272118"}
