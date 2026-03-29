@@ -20,13 +20,13 @@ RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 ROLE_ID = "1485401778962043021"
 MY_ID = "1109224984984956968"
 
-# Your coordinate
 POINT = Point(-80.096278, 40.615111)
-SAMPLE_RADIUS = 0.008  # ~0.5 mi in degrees
+SAMPLE_RADIUS = 0.008
 
 PRIORITY_ORDER = ["2000", "1630", "1300", "0600", "0100"]
 
-# Risk colors and emojis
+RISK_ORDER = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
+
 RISK_COLORS = {
     "NONE": 0x808080,
     "TSTM": 0x90ee90,
@@ -70,6 +70,7 @@ day1_all.sort(key=lambda x: PRIORITY_ORDER.index(x[0]))
 
 day1_to_post = None
 last_priority = last_id.get("1_priority")
+
 for tag, entry in day1_all:
     if entry.id == last_id.get("1"):
         continue
@@ -78,7 +79,7 @@ for tag, entry in day1_all:
     day1_to_post = (entry, tag)
     break
 
-# === DAY 2/3 COLLECTION ===
+# === DAY 2/3 ===
 day2 = None
 day3 = None
 for entry in entries:
@@ -94,6 +95,7 @@ def upload_image(filename):
     r = requests.get(url)
     if r.status_code != 200:
         return None
+
     with open(filename, "wb") as f:
         f.write(r.content)
 
@@ -105,7 +107,11 @@ def upload_image(filename):
     with open(filename, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode()
 
-    payload = {"message": f"update {filename}", "content": content_b64, "branch": BRANCH}
+    payload = {
+        "message": f"update {filename}",
+        "content": content_b64,
+        "branch": BRANCH
+    }
     if sha:
         payload["sha"] = sha
 
@@ -119,57 +125,81 @@ def get_risk(day, base):
     try:
         data = requests.get(f"https://www.spc.noaa.gov/products/outlook/{base}.json").json()
     except:
-        return "NONE", {"tornado": 0, "wind": 0, "hail": 0, "sig": None}, None, []
+        return "NONE", {"tornado":0,"wind":0,"hail":0,"sig":None}, None
 
-    sample_box = box(POINT.x - SAMPLE_RADIUS, POINT.y - SAMPLE_RADIUS,
-                     POINT.x + SAMPLE_RADIUS, POINT.y + SAMPLE_RADIUS)
-    sub = {"tornado": 0, "wind": 0, "hail": 0, "sig": None}
-    order = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
+    sample_box = box(
+        POINT.x - SAMPLE_RADIUS,
+        POINT.y - SAMPLE_RADIUS,
+        POINT.x + SAMPLE_RADIUS,
+        POINT.y + SAMPLE_RADIUS
+    )
+
+    sub = {"tornado":0,"wind":0,"hail":0,"sig":None}
     found = []
 
     for f in data.get("features", []):
         try:
             geom = shape(f["geometry"])
             if geom.intersects(sample_box):
-                cat = f["properties"].get("category", "NONE")
+                cat = f["properties"].get("category","NONE")
                 found.append(cat)
+
                 if day == 1:
-                    sub["tornado"] = f["properties"].get("tor2pct", 0)
-                    sub["wind"] = f["properties"].get("wind10pct", 0)
-                    sub["hail"] = f["properties"].get("hail2pct", 0)
-                    sub["sig"] = f["properties"].get("sig", None)
+                    sub["tornado"] = f["properties"].get("tor2pct",0)
+                    sub["wind"] = f["properties"].get("wind10pct",0)
+                    sub["hail"] = f["properties"].get("hail2pct",0)
+                    sub["sig"] = f["properties"].get("sig",None)
         except:
             continue
 
-    # main risk
+    # Determine current risk
     risk = "NONE"
-    for r in reversed(order):
+    for r in reversed(RISK_ORDER):
         if r in found:
             risk = r
             break
 
-    # nearest higher
-    candidates = []
-    for f in data.get("features", []):
-        try:
-            geom = shape(f["geometry"])
-            cat = f["properties"].get("category", "NONE")
-            if order.index(cat) <= order.index(risk):
-                continue
-            dist = geom.distance(POINT) * 69  # degrees → miles
-            candidates.append((cat, dist, geom.area, geom))
-        except:
-            continue
+    # === NEXT HIGHER ONLY ===
+    try:
+        current_index = RISK_ORDER.index(risk)
+        next_risk = RISK_ORDER[current_index + 1]
+    except:
+        next_risk = None
+
     nearest = None
-    if candidates:
-        candidates.sort(key=lambda x: (-order.index(x[0]), -x[2], x[1]))
-        best = candidates[0]
-        dx = best[3].centroid.x - POINT.x
-        dy = best[3].centroid.y - POINT.y
-        angle = (degrees(atan2(dy, dx)) + 360) % 360
-        dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-        nearest = (best[0], int(best[1]), dirs[int((angle + 22.5) // 45) % 8])
-    return risk, sub, nearest, found
+
+    if next_risk:
+        candidates = []
+
+        for f in data.get("features", []):
+            try:
+                cat = f["properties"].get("category","NONE")
+                if cat != next_risk:
+                    continue
+
+                geom = shape(f["geometry"])
+                centroid = geom.centroid
+
+                dist = POINT.distance(centroid) * 69
+
+                candidates.append((dist, centroid))
+            except:
+                continue
+
+        if candidates:
+            candidates.sort(key=lambda x: x[0])
+            best = candidates[0]
+
+            dx = best[1].x - POINT.x
+            dy = best[1].y - POINT.y
+
+            angle = (degrees(atan2(dy, dx)) + 360) % 360
+            dirs = ["N","NE","E","SE","S","SW","W","NW"]
+            direction = dirs[int((angle+22.5)//45)%8]
+
+            nearest = (next_risk, int(best[0]), direction)
+
+    return risk, sub, nearest
 
 # === BUILD EMBEDS ===
 embeds = []
@@ -179,37 +209,42 @@ content = ""
 if day1_to_post:
     entry, tag = day1_to_post
     print(f"Prepared Day 1 {tag}")
+
     img = upload_image(f"day1otlk_{tag}.png")
+
     if img:
-        risk, sub, nearest, found = get_risk(1, f"day1otlk_{tag}")
-        sub = {k: sub.get(k, 0) for k in ["tornado", "wind", "hail", "sig"]}
+        risk, sub, nearest = get_risk(1, f"day1otlk_{tag}")
+
         prev_risk = last_id.get("1_risk")
         trend = ""
         if prev_risk and prev_risk != risk:
-            trend = f"Trend: {risk} higher than {prev_risk}" if RISK_COLORS[risk] > RISK_COLORS[prev_risk] else f"Trend: {risk} lower than {prev_risk}"
+            if RISK_ORDER.index(risk) > RISK_ORDER.index(prev_risk):
+                trend = f"Trend: {risk} higher than {prev_risk}"
+            else:
+                trend = f"Trend: {risk} lower than {prev_risk}"
+
         last_id["1_risk"] = risk
 
-        # ping logic
-        if risk in ["ENH", "MDT"]:
+        if risk in ["ENH","MDT"]:
             content = f"<@&{ROLE_ID}>"
         elif risk == "HIGH":
             content = "@everyone"
 
         lines = [f"{RISK_EMOJIS[risk]} Risk: {risk}"]
-        tor, wind, hail, sig = sub["tornado"], sub["wind"], sub["hail"], sub["sig"]
-        if tor or wind or hail:
-            if tor: lines.append(f"Tornado: {tor}%")
-            if wind: lines.append(f"Wind: {wind}%")
-            if hail: lines.append(f"Hail: {hail}%")
-        else:
+
+        if sub["tornado"]: lines.append(f"Tornado: {sub['tornado']}%")
+        if sub["wind"]: lines.append(f"Wind: {sub['wind']}%")
+        if sub["hail"]: lines.append(f"Hail: {sub['hail']}%")
+        if not (sub["tornado"] or sub["wind"] or sub["hail"]):
             lines.append("No tornado, wind, or hail risk.")
+
         if nearest:
-            lines.append(f"Nearest higher risk: {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
+            lines.append(f"Next higher risk: {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
         else:
             lines.append("No higher risk levels in CONUS.")
-        if trend: lines.append(trend)
 
-       
+        if trend:
+            lines.append(trend)
 
         embeds.append({
             "title": entry.title,
@@ -218,6 +253,7 @@ if day1_to_post:
             "color": RISK_COLORS.get(risk, 0x808080),
             "image": {"url": img}
         })
+
         last_id["1"] = entry.id
         last_id["1_priority"] = tag
 
@@ -225,13 +261,16 @@ if day1_to_post:
 if day2 and day3:
     if day2.id != last_id.get("2") and day3.id != last_id.get("3"):
         print("Prepared Day 2/3")
+
         img2 = upload_image("day2otlk.png")
         img3 = upload_image("day3otlk.png")
+
         if img2 and img3:
-            r2, _, _, found2 = get_risk(2, "day2otlk")
-            r3, _, _, found3 = get_risk(3, "day3otlk")
+            r2, _, _ = get_risk(2, "day2otlk")
+            r3, _, _ = get_risk(3, "day3otlk")
+
             if not content:
-                if r2 in ["ENH", "MDT"]:
+                if r2 in ["ENH","MDT"]:
                     content = f"<@&{ROLE_ID}>"
                 elif r2 == "HIGH":
                     content = "@everyone"
@@ -243,6 +282,7 @@ if day2 and day3:
                 "color": RISK_COLORS.get(r2, 0x808080),
                 "thumbnail": {"url": img2}
             })
+
             embeds.append({
                 "title": "SPC Day 3 Outlook",
                 "url": day3.link,
@@ -250,15 +290,21 @@ if day2 and day3:
                 "color": RISK_COLORS.get(r3, 0x808080),
                 "thumbnail": {"url": img3}
             })
+
             last_id["2"] = day2.id
             last_id["3"] = day3.id
 
-# === SEND TO DISCORD ===
+# === SEND ===
 if embeds:
     final_content = f"<@{MY_ID}>"
     if content:
         final_content += f" {content}"
-    r = requests.post(WEBHOOK_URL, json={"content": final_content, "embeds": embeds})
+
+    r = requests.post(WEBHOOK_URL, json={
+        "content": final_content,
+        "embeds": embeds
+    })
+
     if r.status_code == 204:
         with open(STATE_FILE, "w") as f:
             json.dump(last_id, f)
