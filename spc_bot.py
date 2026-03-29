@@ -198,7 +198,7 @@ if day1_to_post:
     img = upload_image(f"day1otlk_{tag}.png")
 
     if img:
-        risk, sub, nearest = get_risk(1, f"day1otlk_{tag}")
+        risk, sub, nearest = get_risk(1, f"day1otlk_{tag}", POINT)
 
         risk_text = format_risk(risk, last_id.get("1_risk"))
         last_id["1_risk"] = risk
@@ -240,8 +240,8 @@ if day2 and day3:
         img3 = upload_image("day3otlk.png")
 
         if img2 and img3:
-            r2, _, _ = get_risk(2, "day2otlk")
-            r3, _, _ = get_risk(3, "day3otlk")
+            r2, _, _ = get_risk(2, "day2otlk", POINT)
+            r3, _, _ = get_risk(3, "day3otlk", POINT)
 
             text2 = format_risk(r2, last_id.get("2_risk"))
             text3 = format_risk(r3, last_id.get("3_risk"))
