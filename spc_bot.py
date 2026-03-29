@@ -5,6 +5,7 @@ import json
 import time
 import base64
 from shapely.geometry import shape, Point, box
+from shapely.ops import nearest_points
 from math import atan2, degrees
 
 # === CONFIG ===
@@ -24,7 +25,6 @@ POINT = Point(-80.096278, 40.615111)
 SAMPLE_RADIUS = 0.008
 
 PRIORITY_ORDER = ["2000", "1630", "1300", "0600", "0100"]
-
 RISK_ORDER = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
 
 RISK_COLORS = {
@@ -107,11 +107,7 @@ def upload_image(filename):
     with open(filename, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode()
 
-    payload = {
-        "message": f"update {filename}",
-        "content": content_b64,
-        "branch": BRANCH
-    }
+    payload = {"message": f"update {filename}", "content": content_b64, "branch": BRANCH}
     if sha:
         payload["sha"] = sha
 
@@ -152,54 +148,64 @@ def get_risk(day, base):
         except:
             continue
 
-    # Determine current risk
     risk = "NONE"
     for r in reversed(RISK_ORDER):
         if r in found:
             risk = r
             break
 
-    # === NEXT HIGHER ONLY ===
-    try:
-        current_index = RISK_ORDER.index(risk)
+    current_index = RISK_ORDER.index(risk)
+    next_risk = None
+    if current_index < len(RISK_ORDER) - 1:
         next_risk = RISK_ORDER[current_index + 1]
-    except:
-        next_risk = None
 
     nearest = None
+    candidates = []
 
-    if next_risk:
-        candidates = []
+    for f in data.get("features", []):
+        try:
+            geom = shape(f["geometry"])
+            cat = f["properties"].get("category","NONE")
 
-        for f in data.get("features", []):
-            try:
-                cat = f["properties"].get("category","NONE")
+            if risk == "NONE":
+                pass
+            else:
                 if cat != next_risk:
                     continue
 
-                geom = shape(f["geometry"])
-                centroid = geom.centroid
+            nearest_geom_point, _ = nearest_points(geom.boundary, POINT)
+            dist = POINT.distance(nearest_geom_point) * 69
 
-                dist = POINT.distance(centroid) * 69
+            candidates.append((dist, nearest_geom_point))
+        except:
+            continue
 
-                candidates.append((dist, centroid))
-            except:
-                continue
+    if candidates:
+        candidates.sort(key=lambda x: x[0])
+        best = candidates[0]
 
-        if candidates:
-            candidates.sort(key=lambda x: x[0])
-            best = candidates[0]
+        dx = best[1].x - POINT.x
+        dy = best[1].y - POINT.y
 
-            dx = best[1].x - POINT.x
-            dy = best[1].y - POINT.y
+        angle = (degrees(atan2(dy, dx)) + 360) % 360
+        dirs = ["N","NE","E","SE","S","SW","W","NW"]
+        direction = dirs[int((angle+22.5)//45)%8]
 
-            angle = (degrees(atan2(dy, dx)) + 360) % 360
-            dirs = ["N","NE","E","SE","S","SW","W","NW"]
-            direction = dirs[int((angle+22.5)//45)%8]
+        label = next_risk if risk != "NONE" else "TSTM"
 
-            nearest = (next_risk, int(best[0]), direction)
+        nearest = (label, int(best[0]), direction)
 
     return risk, sub, nearest
+
+# === TREND FORMAT ===
+def format_risk(risk, prev):
+    base = f"{RISK_EMOJIS[risk]} Risk: {risk}"
+    if prev and prev != risk:
+        if RISK_ORDER.index(risk) > RISK_ORDER.index(prev):
+            return f"{RISK_EMOJIS[risk]} Risk: {risk} (**⚠️ up from {prev}**)"
+        else:
+            return f"{RISK_EMOJIS[risk]} Risk: {risk} (down from {prev})"
+    return base
 
 # === BUILD EMBEDS ===
 embeds = []
@@ -208,21 +214,12 @@ content = ""
 # --- DAY 1 ---
 if day1_to_post:
     entry, tag = day1_to_post
-    print(f"Prepared Day 1 {tag}")
-
     img = upload_image(f"day1otlk_{tag}.png")
 
     if img:
         risk, sub, nearest = get_risk(1, f"day1otlk_{tag}")
 
-        prev_risk = last_id.get("1_risk")
-        trend = ""
-        if prev_risk and prev_risk != risk:
-            if RISK_ORDER.index(risk) > RISK_ORDER.index(prev_risk):
-                trend = f"Trend: {risk} higher than {prev_risk}"
-            else:
-                trend = f"Trend: {risk} lower than {prev_risk}"
-
+        risk_text = format_risk(risk, last_id.get("1_risk"))
         last_id["1_risk"] = risk
 
         if risk in ["ENH","MDT"]:
@@ -230,7 +227,7 @@ if day1_to_post:
         elif risk == "HIGH":
             content = "@everyone"
 
-        lines = [f"{RISK_EMOJIS[risk]} Risk: {risk}"]
+        lines = [risk_text]
 
         if sub["tornado"]: lines.append(f"Tornado: {sub['tornado']}%")
         if sub["wind"]: lines.append(f"Wind: {sub['wind']}%")
@@ -243,14 +240,11 @@ if day1_to_post:
         else:
             lines.append("No higher risk levels in CONUS.")
 
-        if trend:
-            lines.append(trend)
-
         embeds.append({
             "title": entry.title,
             "url": entry.link,
             "description": "\n".join(lines),
-            "color": RISK_COLORS.get(risk, 0x808080),
+            "color": RISK_COLORS[risk],
             "image": {"url": img}
         })
 
@@ -260,7 +254,6 @@ if day1_to_post:
 # --- DAY 2/3 ---
 if day2 and day3:
     if day2.id != last_id.get("2") and day3.id != last_id.get("3"):
-        print("Prepared Day 2/3")
 
         img2 = upload_image("day2otlk.png")
         img3 = upload_image("day3otlk.png")
@@ -269,25 +262,25 @@ if day2 and day3:
             r2, _, _ = get_risk(2, "day2otlk")
             r3, _, _ = get_risk(3, "day3otlk")
 
-            if not content:
-                if r2 in ["ENH","MDT"]:
-                    content = f"<@&{ROLE_ID}>"
-                elif r2 == "HIGH":
-                    content = "@everyone"
+            text2 = format_risk(r2, last_id.get("2_risk"))
+            text3 = format_risk(r3, last_id.get("3_risk"))
+
+            last_id["2_risk"] = r2
+            last_id["3_risk"] = r3
 
             embeds.append({
                 "title": "SPC Day 2 Outlook",
                 "url": day2.link,
-                "description": f"{RISK_EMOJIS[r2]} Risk: {r2}",
-                "color": RISK_COLORS.get(r2, 0x808080),
+                "description": text2,
+                "color": RISK_COLORS[r2],
                 "thumbnail": {"url": img2}
             })
 
             embeds.append({
                 "title": "SPC Day 3 Outlook",
                 "url": day3.link,
-                "description": f"{RISK_EMOJIS[r3]} Risk: {r3}",
-                "color": RISK_COLORS.get(r3, 0x808080),
+                "description": text3,
+                "color": RISK_COLORS[r3],
                 "thumbnail": {"url": img3}
             })
 
