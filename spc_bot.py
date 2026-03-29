@@ -131,13 +131,18 @@ def get_risk(day, base, point):
         try:
             geom = shape(f["geometry"])
             if geom.intersects(sample_box):
-                cat = f["properties"].get("category", "NONE")
+                # FIX: Normalize category to catch "General Tstm"
+                raw_cat = f["properties"].get("category", "NONE").upper()
+                cat = "TSTM" if "TSTM" in raw_cat else raw_cat
+                
                 found.append(cat)
                 if day == 1:
-                    sub["tornado"] = f["properties"].get("tor2pct", 0)
-                    sub["wind"] = f["properties"].get("wind10pct", 0)
-                    sub["hail"] = f["properties"].get("hail2pct", 0)
-                    sub["sig"] = f["properties"].get("sig", None)
+                    # FIX: Use max() in case of overlapping polygons
+                    sub["tornado"] = max(sub["tornado"], f["properties"].get("tor2pct", 0))
+                    sub["wind"] = max(sub["wind"], f["properties"].get("wind10pct", 0))
+                    sub["hail"] = max(sub["hail"], f["properties"].get("hail2pct", 0))
+                    if f["properties"].get("sig"):
+                        sub["sig"] = f["properties"].get("sig")
         except:
             continue
 
@@ -153,7 +158,10 @@ def get_risk(day, base, point):
     for f in data.get("features", []):
         try:
             geom = shape(f["geometry"])
-            cat = f["properties"].get("category", "NONE")
+            # FIX: Normalize category here as well
+            raw_cat = f["properties"].get("category", "NONE").upper()
+            cat = "TSTM" if "TSTM" in raw_cat else raw_cat
+            
             if order.index(cat) <= order.index(risk):
                 continue
             # distance from point to nearest edge
