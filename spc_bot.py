@@ -123,6 +123,7 @@ def get_risk(day, base):
     except:
         return "NONE", {"tornado":0,"wind":0,"hail":0,"sig":None}, None
 
+    # small box around point for day 1 local risk
     sample_box = box(
         POINT.x - SAMPLE_RADIUS,
         POINT.y - SAMPLE_RADIUS,
@@ -131,16 +132,15 @@ def get_risk(day, base):
     )
 
     sub = {"tornado":0,"wind":0,"hail":0,"sig":None}
-    found = []
+    local_categories = []
 
-    # --- Detect local risk ---
+    # --- local risk ---
     for f in data.get("features", []):
         try:
             geom = shape(f["geometry"])
+            cat = f["properties"].get("category", "NONE")
             if geom.intersects(sample_box):
-                cat = f["properties"].get("category","NONE")
-                found.append(cat)
-
+                local_categories.append(cat)
                 if day == 1:
                     sub["tornado"] = f["properties"].get("tor2pct",0)
                     sub["wind"] = f["properties"].get("wind10pct",0)
@@ -149,74 +149,41 @@ def get_risk(day, base):
         except:
             continue
 
-    # --- Determine current risk ---
+    # determine main risk
     risk = "NONE"
     for r in reversed(RISK_ORDER):
-        if r in found:
+        if r in local_categories:
             risk = r
             break
 
-    current_index = RISK_ORDER.index(risk)
-    next_risk = None
-    if current_index < len(RISK_ORDER) - 1:
-        next_risk = RISK_ORDER[current_index + 1]
-
+    # --- nearest higher risk ---
     candidates = []
+    local_index = RISK_ORDER.index(risk)
 
     for f in data.get("features", []):
         try:
             geom = shape(f["geometry"])
-            cat = f["properties"].get("category","NONE")
-
-            # --- NORMAL CASE ---
-            if risk != "NONE":
-                if cat != next_risk:
-                    continue
-
-            # --- NONE CASE ---
-            else:
-                # prefer real TSTM polygons
-                if cat != "TSTM":
-                    continue
-
-            # TRUE closest point on polygon (NOT boundary)
-            p1, p2 = nearest_points(POINT, geom)
-            dist = POINT.distance(p2) * 69
-
-            candidates.append((dist, p2, cat))
-
+            cat = f["properties"].get("category", "NONE")
+            cat_index = RISK_ORDER.index(cat)
+            if cat_index <= local_index:
+                continue  # skip lower/equal
+            # true closest point on polygon
+            _, nearest_point = nearest_points(POINT, geom)
+            dist = POINT.distance(nearest_point) * 69  # degrees → miles
+            candidates.append((dist, nearest_point, cat))
         except:
             continue
 
-    # --- FALLBACK if no TSTM polygons exist ---
-    if not candidates and risk == "NONE":
-        for f in data.get("features", []):
-            try:
-                geom = shape(f["geometry"])
-
-                p1, p2 = nearest_points(POINT, geom)
-                dist = POINT.distance(p2) * 69
-
-                candidates.append((dist, p2, "TSTM"))
-            except:
-                continue
-
     nearest = None
-
     if candidates:
-        candidates.sort(key=lambda x: x[0])
+        candidates.sort(key=lambda x: x[0])  # closest first
         best = candidates[0]
-
         dx = best[1].x - POINT.x
         dy = best[1].y - POINT.y
-
         angle = (degrees(atan2(dy, dx)) + 360) % 360
         dirs = ["N","NE","E","SE","S","SW","W","NW"]
         direction = dirs[int((angle+22.5)//45)%8]
-
-        label = next_risk if risk != "NONE" else "TSTM"
-
-        nearest = (label, int(best[0]), direction)
+        nearest = (best[2], int(best[0]), direction)
 
     return risk, sub, nearest
 
