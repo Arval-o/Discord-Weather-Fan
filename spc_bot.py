@@ -117,7 +117,7 @@ def upload_image(filename):
     return f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}?t={int(time.time())}"
 
 # === RISK FUNCTION ===
-def get_risk(day, base):
+def get_risk(day, base, point):
     try:
         data = requests.get(f"https://www.spc.noaa.gov/products/outlook/{base}.json").json()
     except:
@@ -126,12 +126,12 @@ def get_risk(day, base):
     sub = {"tornado":0,"wind":0,"hail":0,"sig":None}
     local_categories = []
 
-    # --- local risk at the exact coordinate ---
+    # --- Determine local risk ---
     for f in data.get("features", []):
         try:
             geom = shape(f["geometry"])
-            cat = f["properties"].get("category", "NONE")
-            if POINT.within(geom):
+            cat = f["properties"].get("category","NONE")
+            if geom.intersects(point):  # <-- Use intersects, not within
                 local_categories.append(cat)
                 if day == 1:
                     sub["tornado"] = f["properties"].get("tor2pct",0)
@@ -141,14 +141,14 @@ def get_risk(day, base):
         except:
             continue
 
-    # determine main local risk
+    # main risk at point
     risk = "NONE"
     for r in reversed(RISK_ORDER):
         if r in local_categories:
             risk = r
             break
 
-    # --- find nearest higher risk polygon ---
+    # --- Find nearest higher risk ---
     local_index = RISK_ORDER.index(risk)
     candidates = []
 
@@ -156,23 +156,21 @@ def get_risk(day, base):
         try:
             geom = shape(f["geometry"])
             cat = f["properties"].get("category","NONE")
-            cat_index = RISK_ORDER.index(cat)
-            if cat_index <= local_index:
-                continue  # only consider strictly higher risk
-            # distance to closest edge
-            _, nearest_point = nearest_points(POINT, geom)
-            dist_mi = POINT.distance(nearest_point) * 69  # approx degrees → miles
+            if RISK_ORDER.index(cat) <= local_index:
+                continue  # only higher risk
+            # distance to nearest edge
+            _, nearest_point = nearest_points(point, geom)
+            dist_mi = point.distance(nearest_point) * 69
             candidates.append((dist_mi, nearest_point, cat))
         except:
             continue
 
     nearest = None
     if candidates:
-        # pick the **closest polygon** regardless of area
-        candidates.sort(key=lambda x: x[0])
+        candidates.sort(key=lambda x: x[0])  # closest first
         best = candidates[0]
-        dx = best[1].x - POINT.x
-        dy = best[1].y - POINT.y
+        dx = best[1].x - point.x
+        dy = best[1].y - point.y
         angle = (degrees(atan2(dy, dx)) + 360) % 360
         dirs = ["N","NE","E","SE","S","SW","W","NW"]
         direction = dirs[int((angle + 22.5)//45)%8]
