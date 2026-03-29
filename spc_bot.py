@@ -123,23 +123,15 @@ def get_risk(day, base):
     except:
         return "NONE", {"tornado":0,"wind":0,"hail":0,"sig":None}, None
 
-    # small box around point for day 1 local risk
-    sample_box = box(
-        POINT.x - SAMPLE_RADIUS,
-        POINT.y - SAMPLE_RADIUS,
-        POINT.x + SAMPLE_RADIUS,
-        POINT.y + SAMPLE_RADIUS
-    )
-
     sub = {"tornado":0,"wind":0,"hail":0,"sig":None}
     local_categories = []
 
-    # --- local risk ---
+    # --- local risk at the exact coordinate ---
     for f in data.get("features", []):
         try:
             geom = shape(f["geometry"])
             cat = f["properties"].get("category", "NONE")
-            if geom.intersects(sample_box):
+            if POINT.within(geom):
                 local_categories.append(cat)
                 if day == 1:
                     sub["tornado"] = f["properties"].get("tor2pct",0)
@@ -149,40 +141,41 @@ def get_risk(day, base):
         except:
             continue
 
-    # determine main risk
+    # determine main local risk
     risk = "NONE"
     for r in reversed(RISK_ORDER):
         if r in local_categories:
             risk = r
             break
 
-    # --- nearest higher risk ---
-    candidates = []
+    # --- find nearest higher risk polygon ---
     local_index = RISK_ORDER.index(risk)
+    candidates = []
 
     for f in data.get("features", []):
         try:
             geom = shape(f["geometry"])
-            cat = f["properties"].get("category", "NONE")
+            cat = f["properties"].get("category","NONE")
             cat_index = RISK_ORDER.index(cat)
             if cat_index <= local_index:
-                continue  # skip lower/equal
-            # true closest point on polygon
+                continue  # only consider strictly higher risk
+            # distance to closest edge
             _, nearest_point = nearest_points(POINT, geom)
-            dist = POINT.distance(nearest_point) * 69  # degrees → miles
-            candidates.append((dist, nearest_point, cat))
+            dist_mi = POINT.distance(nearest_point) * 69  # approx degrees → miles
+            candidates.append((dist_mi, nearest_point, cat))
         except:
             continue
 
     nearest = None
     if candidates:
-        candidates.sort(key=lambda x: x[0])  # closest first
+        # pick the **closest polygon** regardless of area
+        candidates.sort(key=lambda x: x[0])
         best = candidates[0]
         dx = best[1].x - POINT.x
         dy = best[1].y - POINT.y
         angle = (degrees(atan2(dy, dx)) + 360) % 360
         dirs = ["N","NE","E","SE","S","SW","W","NW"]
-        direction = dirs[int((angle+22.5)//45)%8]
+        direction = dirs[int((angle + 22.5)//45)%8]
         nearest = (best[2], int(best[0]), direction)
 
     return risk, sub, nearest
