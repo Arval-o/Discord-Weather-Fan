@@ -39,8 +39,8 @@ RISK_COLORS = {
 }
 
 RISK_EMOJIS = {
-    "NONE": "⚪",
-    "TSTM": "🟢",
+    "NONE": "⬜",
+    "TSTM": "🟦",
     "MRGL": "🟩",
     "SLGT": "🟨",
     "ENH": "🟧",
@@ -98,13 +98,11 @@ def upload_image(filename, dot=False):
     with open(filename,"wb") as f:
         f.write(r.content)
 
-    # Optionally add a dot in the middle (your point)
     if dot:
         try:
             from PIL import Image, ImageDraw
             im = Image.open(filename)
             w,h = im.size
-            # approximate location as % of width/height
             px = int(w*0.5)
             py = int(h*0.5)
             draw = ImageDraw.Draw(im)
@@ -133,7 +131,7 @@ def get_risk(day, base):
     try:
         data = requests.get(f"https://www.spc.noaa.gov/products/outlook/{base}.json").json()
     except:
-        return "NONE", {}, None, None
+        return "NONE", {"tornado":0,"wind":0,"hail":0,"sig":None}, None, []
 
     sample_box = box(POINT.x-SAMPLE_RADIUS, POINT.y-SAMPLE_RADIUS,
                      POINT.x+SAMPLE_RADIUS, POINT.y+SAMPLE_RADIUS)
@@ -148,10 +146,10 @@ def get_risk(day, base):
                 cat = f["properties"].get("category","NONE")
                 found.append(cat)
                 if day==1:
-                    sub["tornado"] = max(sub["tornado"], f["properties"].get("tor2pct",0))
-                    sub["wind"] = max(sub["wind"], f["properties"].get("wind10pct",0))
-                    sub["hail"] = max(sub["hail"], f["properties"].get("hail2pct",0))
-                    sub["sig"] = f["properties"].get("sig",sub["sig"])
+                    sub["tornado"] = f["properties"].get("tor2pct",0)
+                    sub["wind"] = f["properties"].get("wind10pct",0)
+                    sub["hail"] = f["properties"].get("hail2pct",0)
+                    sub["sig"] = f["properties"].get("sig",None)
         except: continue
 
     # main risk
@@ -194,6 +192,7 @@ if day1_to_post:
     img = upload_image(f"day1otlk_{tag}.png", dot=True)
     if img:
         risk, sub, nearest, found = get_risk(1,f"day1otlk_{tag}")
+        sub = {k: sub.get(k,0) for k in ["tornado","wind","hail","sig"]}  # ensure keys exist
         prev_risk = last_id.get("1_risk")
         trend = ""
         if prev_risk and prev_risk != risk:
