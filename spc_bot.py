@@ -129,15 +129,16 @@ def get_risk(day, base, point):
 
     for f in data.get("features", []):
         try:
+            # FIX: Normalize category names to handle "General Tstm"
+            raw_cat = str(f["properties"].get("category", "NONE")).upper()
+            cat = "TSTM" if "TSTM" in raw_cat else raw_cat
+            if cat not in order: cat = "NONE"
+
             geom = shape(f["geometry"])
             if geom.intersects(sample_box):
-                # FIX: Normalize category to catch "General Tstm"
-                raw_cat = f["properties"].get("category", "NONE").upper()
-                cat = "TSTM" if "TSTM" in raw_cat else raw_cat
-                
                 found.append(cat)
                 if day == 1:
-                    # FIX: Use max() in case of overlapping polygons
+                    # FIX: Use max() to avoid grabbing 0 from overlapping background polygons
                     sub["tornado"] = max(sub["tornado"], f["properties"].get("tor2pct", 0))
                     sub["wind"] = max(sub["wind"], f["properties"].get("wind10pct", 0))
                     sub["hail"] = max(sub["hail"], f["properties"].get("hail2pct", 0))
@@ -155,15 +156,18 @@ def get_risk(day, base, point):
 
     # Find nearest higher risk polygon (anywhere, ignoring sample box)
     higher_candidates = []
+    risk_idx = order.index(risk)
+
     for f in data.get("features", []):
         try:
-            geom = shape(f["geometry"])
-            # FIX: Normalize category here as well
-            raw_cat = f["properties"].get("category", "NONE").upper()
+            # FIX: Normalize category here so the comparison works
+            raw_cat = str(f["properties"].get("category", "NONE")).upper()
             cat = "TSTM" if "TSTM" in raw_cat else raw_cat
             
-            if order.index(cat) <= order.index(risk):
+            if cat not in order or order.index(cat) <= risk_idx:
                 continue
+
+            geom = shape(f["geometry"])
             # distance from point to nearest edge
             dist = geom.exterior.distance(point) * 69  # miles
             higher_candidates.append((cat, dist, geom))
