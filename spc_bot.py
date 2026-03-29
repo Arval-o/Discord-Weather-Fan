@@ -133,6 +133,7 @@ def get_risk(day, base):
     sub = {"tornado":0,"wind":0,"hail":0,"sig":None}
     found = []
 
+    # --- Detect local risk ---
     for f in data.get("features", []):
         try:
             geom = shape(f["geometry"])
@@ -148,6 +149,7 @@ def get_risk(day, base):
         except:
             continue
 
+    # --- Determine current risk ---
     risk = "NONE"
     for r in reversed(RISK_ORDER):
         if r in found:
@@ -159,7 +161,6 @@ def get_risk(day, base):
     if current_index < len(RISK_ORDER) - 1:
         next_risk = RISK_ORDER[current_index + 1]
 
-    nearest = None
     candidates = []
 
     for f in data.get("features", []):
@@ -167,18 +168,40 @@ def get_risk(day, base):
             geom = shape(f["geometry"])
             cat = f["properties"].get("category","NONE")
 
-            if risk == "NONE":
-                pass
-            else:
+            # --- NORMAL CASE ---
+            if risk != "NONE":
                 if cat != next_risk:
                     continue
 
-            nearest_geom_point, _ = nearest_points(geom.boundary, POINT)
-            dist = POINT.distance(nearest_geom_point) * 69
+            # --- NONE CASE ---
+            else:
+                # prefer real TSTM polygons
+                if cat != "TSTM":
+                    continue
 
-            candidates.append((dist, nearest_geom_point))
+            # TRUE closest point on polygon (NOT boundary)
+            p1, p2 = nearest_points(POINT, geom)
+            dist = POINT.distance(p2) * 69
+
+            candidates.append((dist, p2, cat))
+
         except:
             continue
+
+    # --- FALLBACK if no TSTM polygons exist ---
+    if not candidates and risk == "NONE":
+        for f in data.get("features", []):
+            try:
+                geom = shape(f["geometry"])
+
+                p1, p2 = nearest_points(POINT, geom)
+                dist = POINT.distance(p2) * 69
+
+                candidates.append((dist, p2, "TSTM"))
+            except:
+                continue
+
+    nearest = None
 
     if candidates:
         candidates.sort(key=lambda x: x[0])
