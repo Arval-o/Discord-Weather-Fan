@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install shapely requests feedparser Pillow
+          pip install shapely requests feedparser
 
       - name: Run bots loop (every 1.5 minutes)
         run: |
