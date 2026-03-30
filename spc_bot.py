@@ -294,7 +294,7 @@ if day1_to_post:
         emoji = RISK_EMOJIS.get(risk, "")
         if prev_risk and prev_risk != risk:
             if RISK_ORDER.index(risk) > RISK_ORDER.index(prev_risk):
-                trend = f"{emoji} Risk: {risk} **(⚠️ UP FROM {prev_risk})**"
+                trend = f"{emoji} Risk: {risk} ** (⚠️ UP FROM {prev_risk})**"
             else:
                 trend = f"{emoji} Risk: {risk} (down from {prev_risk})"
         else:
@@ -350,7 +350,7 @@ if day2 and day3:
             trend2 = ""
             if prev_r2:
                 if RISK_ORDER.index(r2) > RISK_ORDER.index(prev_r2):
-                    trend2 = f"{emoji2} Risk: {r2} **(⚠️ UP FROM {prev_r2})**"
+                    trend2 = f"{emoji2} Risk: {r2} ** (⚠️ UP FROM {prev_r2})**"
                 elif RISK_ORDER.index(r2) < RISK_ORDER.index(prev_r2):
                     trend2 = f"{emoji2} Risk: {r2} (down from {prev_r2})"
                 else:
@@ -363,7 +363,7 @@ if day2 and day3:
             trend3 = ""
             if prev_r3:
                 if RISK_ORDER.index(r3) > RISK_ORDER.index(prev_r3):
-                    trend3 = f"{emoji3} Risk: {r3} **(⚠️ UP FROM {prev_r3})**"
+                    trend3 = f"{emoji3} Risk: {r3} ** (⚠️ UP FROM {prev_r3})**"
                 elif RISK_ORDER.index(r3) < RISK_ORDER.index(prev_r3):
                     trend3 = f"{emoji3} Risk: {r3} (down from {prev_r3})"
                 else:
