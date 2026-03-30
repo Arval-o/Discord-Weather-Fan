@@ -30,6 +30,18 @@ PRIORITY_ORDER = ["2000", "1630", "1300", "0600", "0100"]
 # Risk order — used for all comparisons (avoids color-collision bugs)
 RISK_ORDER = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
 
+# The SPC GeoJSON LABEL2 field uses these exact strings for each category.
+# "General Thunder" maps to TSTM; the severe categories use their short codes.
+LABEL2_TO_RISK = {
+    "TSTM":            "TSTM",   # older/alt spelling sometimes present
+    "General Thunder": "TSTM",
+    "Marginal":        "MRGL",
+    "Slight":          "SLGT",
+    "Enhanced":        "ENH",
+    "Moderate":        "MDT",
+    "High":            "HIGH",
+}
+
 # Risk colors and emojis
 RISK_COLORS = {
     "NONE": 0x808080,
@@ -96,6 +108,7 @@ for entry in entries:
 def upload_image(filename):
     img_response = requests.get(f"https://www.spc.noaa.gov/products/outlook/{filename}")
     if img_response.status_code != 200:
+        print(f"Image fetch failed for {filename}: HTTP {img_response.status_code}")
         return None
 
     with open(filename, "wb") as img_file:
@@ -123,56 +136,104 @@ def upload_image(filename):
     return f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{PAGE_FOLDER}/{filename}?t={int(time.time())}"
 
 # === RISK FUNCTION ===
-def get_risk(day, base, point):
+# The SPC GeoJSON endpoints are:
+#   Day 1 categorical: day1otlk_cat.lyr.geojson  (always current, no time suffix needed)
+#   Day 2 categorical: day2otlk_cat.lyr.geojson
+#   Day 3 categorical: day3otlk_cat.lyr.geojson
+#
+# The property for the risk label is LABEL2, with values like:
+#   "General Thunder", "Marginal", "Slight", "Enhanced", "Moderate", "High"
+#
+# Polygons are "cake-layer" style: a point under MRGL also has a TSTM polygon
+# covering it. We take the highest category found at the point.
+#
+# Probabilistic sub-risks (tornado/wind/hail %) use time-suffixed files, e.g.:
+#   day1otlk_1300_torn.lyr.geojson
+
+def parse_label2(label2_value):
+    """Convert a LABEL2 string to our internal RISK_ORDER key."""
+    if not label2_value:
+        return "NONE"
+    v = label2_value.strip()
+    return LABEL2_TO_RISK.get(v, "NONE")
+
+def get_risk(day, tag, point):
+    """
+    day  : int  (1, 2, or 3)
+    tag  : str  issuance time tag for Day 1 (e.g. "1300"); None for Day 2/3
+    point: shapely Point (lon, lat)
+
+    Returns: (risk_str, sub_dict, nearest_tuple_or_None, found_list)
+    """
+    # --- Categorical GeoJSON ---
+    cat_url = f"https://www.spc.noaa.gov/products/outlook/day{day}otlk_cat.lyr.geojson"
     try:
-        data = requests.get(f"https://www.spc.noaa.gov/products/outlook/{base}.json").json()
-    except:
+        cat_data = requests.get(cat_url, timeout=15).json()
+    except Exception as e:
+        print(f"Failed to fetch categorical GeoJSON (day {day}): {e}")
         return "NONE", {"tornado": 0, "wind": 0, "hail": 0, "sig": None}, None, []
 
-    # Compute local risk
     sample_box = box(point.x - SAMPLE_RADIUS, point.y - SAMPLE_RADIUS,
                      point.x + SAMPLE_RADIUS, point.y + SAMPLE_RADIUS)
-    sub = {"tornado": 0, "wind": 0, "hail": 0, "sig": None}
-    found = []
 
-    # Check categorical risks (TSTM is a category in the main JSON, no separate prob fetch needed)
-    for f in data.get("features", []):
+    found = []
+    for f in cat_data.get("features", []):
         try:
             geom = shape(f["geometry"])
             if geom.intersects(sample_box):
-                cat = f["properties"].get("category", "NONE").upper()
-                found.append(cat)
-                if day == 1:
-                    sub["tornado"] = max(sub["tornado"], f["properties"].get("tor2pct", 0))
-                    sub["wind"] = max(sub["wind"], f["properties"].get("wind10pct", 0))
-                    sub["hail"] = max(sub["hail"], f["properties"].get("hail2pct", 0))
-                    if f["properties"].get("sig"):
-                        sub["sig"] = f["properties"].get("sig")
-        except:
+                risk_key = parse_label2(f["properties"].get("LABEL2", ""))
+                if risk_key != "NONE":
+                    found.append(risk_key)
+        except Exception:
             continue
 
-    # Determine main risk at point using RISK_ORDER
+    # Highest risk at point
     risk = "NONE"
     for r in reversed(RISK_ORDER):
         if r in found:
             risk = r
             break
 
-    # Find nearest higher risk polygon — direction uses nearest edge point, not centroid
+    # --- Probabilistic sub-risks (Day 1 only) ---
+    sub = {"tornado": 0, "wind": 0, "hail": 0, "sig": None}
+    if day == 1 and tag:
+        prob_types = {
+            "tornado": f"day1otlk_{tag}_torn.lyr.geojson",
+            "wind":    f"day1otlk_{tag}_wind.lyr.geojson",
+            "hail":    f"day1otlk_{tag}_hail.lyr.geojson",
+        }
+        for prob_key, prob_file in prob_types.items():
+            try:
+                prob_url = f"https://www.spc.noaa.gov/products/outlook/{prob_file}"
+                prob_data = requests.get(prob_url, timeout=15).json()
+                for f in prob_data.get("features", []):
+                    try:
+                        geom = shape(f["geometry"])
+                        if geom.intersects(sample_box):
+                            # LABEL2 for prob outlooks is e.g. "5%", "10%", "15%", "30%"
+                            raw = f["properties"].get("LABEL2", "0%").replace("%", "").strip()
+                            val = int(raw) if raw.isdigit() else 0
+                            sub[prob_key] = max(sub[prob_key], val)
+                            if f["properties"].get("sig"):
+                                sub["sig"] = True
+                    except Exception:
+                        continue
+            except Exception as e:
+                print(f"Could not fetch {prob_file}: {e}")
+
+    # --- Nearest higher risk polygon ---
     higher_candidates = []
-    for f in data.get("features", []):
+    for f in cat_data.get("features", []):
         try:
             geom = shape(f["geometry"])
-            cat = f["properties"].get("category", "NONE").upper()
+            cat = parse_label2(f["properties"].get("LABEL2", ""))
             if RISK_ORDER.index(cat) <= RISK_ORDER.index(risk):
                 continue
-            # Distance to nearest edge (in degrees), convert to miles
             dist_deg = geom.exterior.distance(point)
             dist_miles = dist_deg * 69
-            # Nearest point on the polygon edge for accurate direction
             _, nearest_pt = nearest_points(point, geom.exterior)
             higher_candidates.append((cat, dist_miles, nearest_pt))
-        except:
+        except Exception:
             continue
 
     nearest = None
@@ -200,7 +261,7 @@ if day1_to_post:
     print(f"Prepared Day 1 {tag}")
     img = upload_image(f"day1otlk_{tag}.png")
     if img:
-        risk, sub, nearest, found = get_risk(1, f"day1otlk_{tag}", POINT)
+        risk, sub, nearest, found = get_risk(1, tag, POINT)
         prev_risk = last_id.get("1_risk")
         trend = ""
         if prev_risk and prev_risk != risk:
@@ -251,8 +312,8 @@ if day2 and day3:
         img2 = upload_image("day2otlk.png")
         img3 = upload_image("day3otlk.png")
         if img2 and img3:
-            r2, sub2, nearest2, found2 = get_risk(2, "day2otlk", POINT)
-            r3, sub3, nearest3, found3 = get_risk(3, "day3otlk", POINT)
+            r2, sub2, nearest2, found2 = get_risk(2, None, POINT)
+            r3, sub3, nearest3, found3 = get_risk(3, None, POINT)
 
             # trend messages — use RISK_ORDER for comparison, not colors
             prev_r2 = last_id.get("2_risk")
