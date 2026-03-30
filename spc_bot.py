@@ -83,9 +83,9 @@ day2 = None
 day3 = None
 for entry in entries:
     t = entry.title.lower()
-    if "day 2" in t:
+    if "day 2" in t and not day2:
         day2 = entry
-    elif "day 3" in t:
+    elif "day 3" in t and not day3:
         day3 = entry
 
 # === IMAGE UPLOAD ===
@@ -120,6 +120,19 @@ def get_risk(day, base, point):
     except:
         return "NONE", {"tornado": 0, "wind": 0, "hail": 0, "sig": None}, None, []
 
+    # Also fetch probabilistic data to check for TSTM areas
+    tstm_polygons = []
+    if day == 1:
+        try:
+            # The probabilistic outlook includes general thunderstorm areas
+            prob_data = requests.get(f"https://www.spc.noaa.gov/products/outlook/{base}_prob.json").json()
+            for f in prob_data.get("features", []):
+                label = f["properties"].get("LABEL2", "")
+                if "TSTM" in label.upper():
+                    tstm_polygons.append(f)
+        except:
+            pass
+
     # Compute local risk
     sample_box = box(point.x - SAMPLE_RADIUS, point.y - SAMPLE_RADIUS,
                      point.x + SAMPLE_RADIUS, point.y + SAMPLE_RADIUS)
@@ -127,23 +140,28 @@ def get_risk(day, base, point):
     order = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
     found = []
 
+    # Check categorical risks
     for f in data.get("features", []):
         try:
-            # FIX: Normalize category names to handle "General Tstm"
-            raw_cat = str(f["properties"].get("category", "NONE")).upper()
-            cat = "TSTM" if "TSTM" in raw_cat else raw_cat
-            if cat not in order: cat = "NONE"
-
             geom = shape(f["geometry"])
             if geom.intersects(sample_box):
+                cat = f["properties"].get("category", "NONE")
                 found.append(cat)
                 if day == 1:
-                    # FIX: Use max() to avoid grabbing 0 from overlapping background polygons
                     sub["tornado"] = max(sub["tornado"], f["properties"].get("tor2pct", 0))
                     sub["wind"] = max(sub["wind"], f["properties"].get("wind10pct", 0))
                     sub["hail"] = max(sub["hail"], f["properties"].get("hail2pct", 0))
                     if f["properties"].get("sig"):
                         sub["sig"] = f["properties"].get("sig")
+        except:
+            continue
+
+    # Check TSTM areas
+    for f in tstm_polygons:
+        try:
+            geom = shape(f["geometry"])
+            if geom.intersects(sample_box):
+                found.append("TSTM")
         except:
             continue
 
@@ -154,29 +172,33 @@ def get_risk(day, base, point):
             risk = r
             break
 
-    # Find nearest higher risk polygon (anywhere, ignoring sample box)
+    # Find nearest higher risk polygon (including TSTM)
     higher_candidates = []
-    risk_idx = order.index(risk)
-
+    
+    # Check categorical risks
     for f in data.get("features", []):
         try:
-            # FIX: Normalize category here so the comparison works
-            raw_cat = str(f["properties"].get("category", "NONE")).upper()
-            cat = "TSTM" if "TSTM" in raw_cat else raw_cat
-            
-            if cat not in order or order.index(cat) <= risk_idx:
-                continue
-
             geom = shape(f["geometry"])
-            # distance from point to nearest edge
+            cat = f["properties"].get("category", "NONE")
+            if order.index(cat) <= order.index(risk):
+                continue
             dist = geom.exterior.distance(point) * 69  # miles
             higher_candidates.append((cat, dist, geom))
         except:
             continue
+    
+    # Check TSTM areas
+    if order.index("TSTM") > order.index(risk):
+        for f in tstm_polygons:
+            try:
+                geom = shape(f["geometry"])
+                dist = geom.exterior.distance(point) * 69
+                higher_candidates.append(("TSTM", dist, geom))
+            except:
+                continue
 
     nearest = None
     if higher_candidates:
-        # pick closest polygon
         higher_candidates.sort(key=lambda x: x[1])
         best = higher_candidates[0]
         dx = best[2].centroid.x - point.x
@@ -184,6 +206,7 @@ def get_risk(day, base, point):
         angle = (degrees(atan2(dy, dx)) + 360) % 360
         dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
         nearest = (best[0], int(best[1]), dirs[int((angle + 22.5) // 45) % 8])
+    
     return risk, sub, nearest, found
 
 # === BUILD EMBEDS ===
@@ -197,7 +220,6 @@ if day1_to_post:
     img = upload_image(f"day1otlk_{tag}.png")
     if img:
         risk, sub, nearest, found = get_risk(1, f"day1otlk_{tag}", POINT)
-        sub = {k: sub.get(k, 0) for k in ["tornado", "wind", "hail", "sig"]}
         prev_risk = last_id.get("1_risk")
         trend = ""
         if prev_risk and prev_risk != risk:
@@ -242,7 +264,7 @@ if day1_to_post:
 
 # --- DAY 2/3 ---
 if day2 and day3:
-    if day2.id != last_id.get("2") and day3.id != last_id.get("3"):
+    if day2.id != last_id.get("2") or day3.id != last_id.get("3"):
         print("Prepared Day 2/3")
         img2 = upload_image("day2otlk.png")
         img3 = upload_image("day3otlk.png")
