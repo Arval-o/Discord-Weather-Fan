@@ -36,7 +36,7 @@ RISK_COLORS = {
     "HIGH": 0xFF0000
 }
 
-# === SAFE JSON FETCH ===
+# === SAFE JSON ===
 def safe_json(url):
     try:
         r = requests.get(url, timeout=10)
@@ -44,7 +44,7 @@ def safe_json(url):
             return None
         return r.json()
     except Exception as e:
-        print("JSON fetch error:", e)
+        print("JSON error:", e)
         return None
 
 # === LOAD STATE ===
@@ -58,7 +58,7 @@ except:
 feed = feedparser.parse(RSS_URL)
 entries = feed.entries[::-1]
 
-# === DAY 1 COLLECTION ===
+# === DAY 1 ===
 day1_all = []
 for entry in entries:
     t = entry.title.lower()
@@ -70,16 +70,12 @@ for entry in entries:
 day1_all.sort(key=lambda x: PRIORITY_ORDER.index(x[0]))
 
 day1_to_post = None
-last_priority = last_id.get("1_priority")
 
 for tag, entry in day1_all:
     entry_id = getattr(entry, "id", getattr(entry, "guid", None))
-    if entry_id == last_id.get("1"):
-        continue
-    if last_priority and PRIORITY_ORDER.index(tag) > PRIORITY_ORDER.index(last_priority):
-        continue
-    day1_to_post = (entry, tag)
-    break
+    if entry_id != last_id.get("1"):
+        day1_to_post = (entry, tag)
+        break
 
 # === DAY 2/3 ===
 day2 = None
@@ -111,11 +107,7 @@ def upload_image(filename):
     with open(filename, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode()
 
-    payload = {
-        "message": f"update {filename}",
-        "content": content_b64,
-        "branch": BRANCH
-    }
+    payload = {"message": f"update {filename}", "content": content_b64, "branch": BRANCH}
     if sha:
         payload["sha"] = sha
 
@@ -127,7 +119,7 @@ def upload_image(filename):
 
     return f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{filename}?t={int(time.time())}"
 
-# === RISK FUNCTION ===
+# === RISK ===
 def get_risk(day, base, point):
     data = safe_json(f"https://www.spc.noaa.gov/products/outlook/{base}.json")
     if not data:
@@ -160,14 +152,14 @@ def get_risk(day, base, point):
                     sub["hail"] = max(sub["hail"], f["properties"].get("hail2pct", 0))
                     if f["properties"].get("sig"):
                         sub["sig"] = f["properties"].get("sig")
-        except Exception as e:
-            print("Geom error:", e)
+        except Exception:
+            pass
 
     for f in tstm_polygons:
         try:
             if shape(f["geometry"]).intersects(sample_box):
                 found.append("TSTM")
-        except Exception:
+        except:
             pass
 
     risk = "NONE"
@@ -176,7 +168,6 @@ def get_risk(day, base, point):
             risk = r
             break
 
-    # nearest higher
     higher_candidates = []
 
     for f in data.get("features", []):
@@ -187,7 +178,7 @@ def get_risk(day, base, point):
                 continue
             dist = geom.distance(point) * 69
             higher_candidates.append((cat, dist, geom))
-        except Exception:
+        except:
             pass
 
     if RISK_ORDER.index("TSTM") > RISK_ORDER.index(risk):
@@ -213,17 +204,14 @@ def get_risk(day, base, point):
 
     return risk, sub, nearest, found
 
-# === SAVE STATE SAFELY ===
+# === SAVE STATE ===
 def save_state(data):
     tmp = STATE_FILE + ".tmp"
     with open(tmp, "w") as f:
         json.dump(data, f)
     os.replace(tmp, STATE_FILE)
 
-# === BUILD EMBEDS ===
-embeds = []
-content = ""
-
+# === TREND ===
 def trend_text(risk, prev):
     if not prev:
         return f"Risk: {risk}"
@@ -232,6 +220,10 @@ def trend_text(risk, prev):
     elif RISK_ORDER.index(risk) < RISK_ORDER.index(prev):
         return f"Risk: {risk} (down from {prev})"
     return f"Risk: {risk}"
+
+# === BUILD ===
+embeds = []
+content = ""
 
 # --- DAY 1 ---
 if day1_to_post:
@@ -272,21 +264,26 @@ if day1_to_post:
         })
 
         last_id["1"] = getattr(entry, "id", getattr(entry, "guid", None))
-        last_id["1_priority"] = tag
 
 # --- DAY 2/3 ---
 if day2 and day3:
     id2 = getattr(day2, "id", getattr(day2, "guid", None))
     id3 = getattr(day3, "id", getattr(day3, "guid", None))
 
-    if id2 != last_id.get("2") or id3 != last_id.get("3"):
+    r2, _, _, _ = get_risk(2, "day2otlk", POINT)
+    r3, _, _, _ = get_risk(3, "day3otlk", POINT)
+
+    if (
+        id2 != last_id.get("2")
+        or id3 != last_id.get("3")
+        or r2 != last_id.get("2_risk")
+        or r3 != last_id.get("3_risk")
+        or day1_to_post
+    ):
         img2 = upload_image("day2otlk.png")
         img3 = upload_image("day3otlk.png")
 
         if img2 and img3:
-            r2, _, _, _ = get_risk(2, "day2otlk", POINT)
-            r3, _, _, _ = get_risk(3, "day3otlk", POINT)
-
             trend2 = trend_text(r2, last_id.get("2_risk"))
             trend3 = trend_text(r3, last_id.get("3_risk"))
 
