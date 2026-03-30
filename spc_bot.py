@@ -256,15 +256,20 @@ def get_risk(day, point):
 
     nearest = None
     if higher_by_level:
-        # Pick the lowest risk level above current (the immediate next step up)
         for r in RISK_ORDER[current_idx + 1:]:
             if r in higher_by_level:
                 dist_miles, nearest_pt = higher_by_level[r]
-                dx = nearest_pt.x - point.x
-                dy = nearest_pt.y - point.y
-                angle = (degrees(atan2(dy, dx)) + 360) % 360
+    
+                # === FIXED BEARING CALCULATION ===
+                dx = nearest_pt.x - point.x   # longitude (E/W)
+                dy = nearest_pt.y - point.y   # latitude (N/S)
+    
+                # Convert math angle → compass bearing
+                angle = (450 - degrees(atan2(dy, dx))) % 360
+    
                 dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
                 direction = dirs[int((angle + 22.5) // 45) % 8]
+    
                 nearest = (r, int(dist_miles), direction)
                 break
 
@@ -289,7 +294,7 @@ if day1_to_post:
         emoji = RISK_EMOJIS.get(risk, "")
         if prev_risk and prev_risk != risk:
             if RISK_ORDER.index(risk) > RISK_ORDER.index(prev_risk):
-                trend = f"{emoji} Risk: {risk} ⚠️ (up from {prev_risk})"
+                trend = f"{emoji} Risk: {risk} **(⚠️ UP FROM {prev_risk})**"
             else:
                 trend = f"{emoji} Risk: {risk} (down from {prev_risk})"
         else:
@@ -345,7 +350,7 @@ if day2 and day3:
             trend2 = ""
             if prev_r2:
                 if RISK_ORDER.index(r2) > RISK_ORDER.index(prev_r2):
-                    trend2 = f"{emoji2} Risk: {r2} ⚠️ (up from {prev_r2})"
+                    trend2 = f"{emoji2} Risk: {r2} **(⚠️ UP FROM {prev_r2})**"
                 elif RISK_ORDER.index(r2) < RISK_ORDER.index(prev_r2):
                     trend2 = f"{emoji2} Risk: {r2} (down from {prev_r2})"
                 else:
@@ -358,7 +363,7 @@ if day2 and day3:
             trend3 = ""
             if prev_r3:
                 if RISK_ORDER.index(r3) > RISK_ORDER.index(prev_r3):
-                    trend3 = f"{emoji3} Risk: {r3} ⚠️ (up from {prev_r3})"
+                    trend3 = f"{emoji3} Risk: {r3} **(⚠️ UP FROM {prev_r3})**"
                 elif RISK_ORDER.index(r3) < RISK_ORDER.index(prev_r3):
                     trend3 = f"{emoji3} Risk: {r3} (down from {prev_r3})"
                 else:
