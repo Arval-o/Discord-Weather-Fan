@@ -4,8 +4,8 @@ import os
 import json
 import time
 import base64
-from shapely.geometry import shape, Point, box
-from shapely.ops import nearest_points
+from shapely.geometry import shape, Point, box, MultiPolygon
+from shapely.ops import nearest_points, unary_union
 from math import atan2, degrees
 
 # === CONFIG ===
@@ -145,13 +145,15 @@ def upload_image(filename):
         print(f"GitHub upload failed for {filename}: {put_response.text}")
         return None
 
-    return f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/{PAGE_FOLDER}/{filename}?t={int(time.time())}"
+    # GitHub Pages serves the docs/ folder as the site root, so the URL
+    # does NOT include the PAGE_FOLDER segment — just /filename directly.
+    user, repo_name = REPO.split("/")
+    return f"https://{user}.github.io/{repo_name}/{filename}?t={int(time.time())}"
 
 # === MAPSERVER QUERY ===
 def query_layer(layer_id):
     """
     Query a NOAA MapServer layer and return its GeoJSON features.
-    Uses: where=1=1, outFields=*, f=geojson
     """
     url = f"{MAPSERVER}/{layer_id}/query"
     params = {
@@ -166,6 +168,15 @@ def query_layer(layer_id):
     except Exception as e:
         print(f"MapServer query failed for layer {layer_id}: {e}")
         return []
+
+def geom_boundary(geom):
+    """
+    Return the exterior boundary of a geometry, handling both Polygon
+    and MultiPolygon so that distance/nearest_points never fails.
+    """
+    if isinstance(geom, MultiPolygon):
+        return unary_union([p.exterior for p in geom.geoms])
+    return geom.exterior
 
 # === RISK FUNCTION ===
 def get_risk(day, point):
@@ -200,7 +211,6 @@ def get_risk(day, point):
             break
 
     # --- Probabilistic sub-risks (Day 1 only) ---
-    # The prob layers' `dn` field is the integer percentage (5, 10, 15, 30, 45, 60)
     sub = {"tornado": 0, "wind": 0, "hail": 0, "sig": None}
     if day == 1:
         for prob_key, layer_map in [("tornado", LAYER_IDS["torn"]),
@@ -213,37 +223,50 @@ def get_risk(day, point):
                     if geom.intersects(sample_box):
                         dn = f["properties"].get("dn", 0)
                         sub[prob_key] = max(sub[prob_key], int(dn) if dn else 0)
-                        # sig hatching is stored as dn=10 in the significant layers
-                        # (queried separately only if needed — mark True if any dn >= 10)
                         if int(dn or 0) >= 10:
                             sub["sig"] = True
                 except Exception:
                     continue
 
     # --- Nearest higher risk polygon ---
-    higher_candidates = []
+    # SPC polygons are cake-layered (SLGT contains MRGL contains TSTM).
+    # We want the *next* risk level above the user's current risk, not
+    # just the closest polygon boundary regardless of level.
+    # Strategy: find the closest polygon for each level above current risk,
+    # then pick the lowest such level (i.e. the next step up).
+    current_idx = RISK_ORDER.index(risk)
+    
+    # Build a dict: risk_level -> list of (dist_miles, nearest_pt)
+    higher_by_level = {}
     for f in cat_features:
         try:
             geom = shape(f["geometry"])
             dn = f["properties"].get("dn")
             cat = DN_TO_RISK.get(dn, "NONE")
-            if RISK_ORDER.index(cat) <= RISK_ORDER.index(risk):
+            cat_idx = RISK_ORDER.index(cat)
+            if cat_idx <= current_idx:
                 continue
-            dist_miles = geom.exterior.distance(point) * 69
-            _, nearest_pt = nearest_points(point, geom.exterior)
-            higher_candidates.append((cat, dist_miles, nearest_pt))
+            boundary = geom_boundary(geom)
+            dist_miles = boundary.distance(point) * 69
+            _, nearest_pt = nearest_points(point, boundary)
+            if cat not in higher_by_level or dist_miles < higher_by_level[cat][0]:
+                higher_by_level[cat] = (dist_miles, nearest_pt)
         except Exception:
             continue
 
     nearest = None
-    if higher_candidates:
-        higher_candidates.sort(key=lambda x: x[1])
-        best = higher_candidates[0]
-        dx = best[2].x - point.x
-        dy = best[2].y - point.y
-        angle = (degrees(atan2(dy, dx)) + 360) % 360
-        dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-        nearest = (best[0], int(best[1]), dirs[int((angle + 22.5) // 45) % 8])
+    if higher_by_level:
+        # Pick the lowest risk level above current (the immediate next step up)
+        for r in RISK_ORDER[current_idx + 1:]:
+            if r in higher_by_level:
+                dist_miles, nearest_pt = higher_by_level[r]
+                dx = nearest_pt.x - point.x
+                dy = nearest_pt.y - point.y
+                angle = (degrees(atan2(dy, dx)) + 360) % 360
+                dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+                direction = dirs[int((angle + 22.5) // 45) % 8]
+                nearest = (r, int(dist_miles), direction)
+                break
 
     return risk, sub, nearest, found
 
@@ -263,13 +286,14 @@ if day1_to_post:
         risk, sub, nearest, found = get_risk(1, POINT)
         prev_risk = last_id.get("1_risk")
         trend = ""
+        emoji = RISK_EMOJIS.get(risk, "")
         if prev_risk and prev_risk != risk:
             if RISK_ORDER.index(risk) > RISK_ORDER.index(prev_risk):
-                trend = f"Risk: {risk} ⚠️ (up from {prev_risk})"
+                trend = f"{emoji} Risk: {risk} ⚠️ (up from {prev_risk})"
             else:
-                trend = f"Risk: {risk} (down from {prev_risk})"
+                trend = f"{emoji} Risk: {risk} (down from {prev_risk})"
         else:
-            trend = f"Risk: {risk}"
+            trend = f"{emoji} Risk: {risk}"
 
         # ping logic
         if risk in ["ENH", "MDT"]:
@@ -280,14 +304,15 @@ if day1_to_post:
         lines = [trend]
         tor, wind, hail, sig = sub["tornado"], sub["wind"], sub["hail"], sub["sig"]
         if tor or wind or hail:
-            if tor: lines.append(f"Tornado: {tor}%")
-            if wind: lines.append(f"Wind: {wind}%")
-            if hail: lines.append(f"Hail: {hail}%")
+            if tor: lines.append(f"🌪️ Tornado: {tor}%")
+            if wind: lines.append(f"💨 Wind: {wind}%")
+            if hail: lines.append(f"🧊 Hail: {hail}%")
         else:
             lines.append("No tornado, wind, or hail risk.")
 
         if nearest:
-            lines.append(f"Nearest higher risk: {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
+            nearest_emoji = RISK_EMOJIS.get(nearest[0], "")
+            lines.append(f"Nearest higher risk: {nearest_emoji} {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
         else:
             lines.append("No higher risk levels in CONUS.")
 
@@ -316,28 +341,30 @@ if day2 and day3:
 
             # trend messages — use RISK_ORDER for comparison, not colors
             prev_r2 = last_id.get("2_risk")
+            emoji2 = RISK_EMOJIS.get(r2, "")
             trend2 = ""
             if prev_r2:
                 if RISK_ORDER.index(r2) > RISK_ORDER.index(prev_r2):
-                    trend2 = f"Risk: {r2} ⚠️ (up from {prev_r2})"
+                    trend2 = f"{emoji2} Risk: {r2} ⚠️ (up from {prev_r2})"
                 elif RISK_ORDER.index(r2) < RISK_ORDER.index(prev_r2):
-                    trend2 = f"Risk: {r2} (down from {prev_r2})"
+                    trend2 = f"{emoji2} Risk: {r2} (down from {prev_r2})"
                 else:
-                    trend2 = f"Risk: {r2}"
+                    trend2 = f"{emoji2} Risk: {r2}"
             else:
-                trend2 = f"Risk: {r2}"
+                trend2 = f"{emoji2} Risk: {r2}"
 
             prev_r3 = last_id.get("3_risk")
+            emoji3 = RISK_EMOJIS.get(r3, "")
             trend3 = ""
             if prev_r3:
                 if RISK_ORDER.index(r3) > RISK_ORDER.index(prev_r3):
-                    trend3 = f"Risk: {r3} ⚠️ (up from {prev_r3})"
+                    trend3 = f"{emoji3} Risk: {r3} ⚠️ (up from {prev_r3})"
                 elif RISK_ORDER.index(r3) < RISK_ORDER.index(prev_r3):
-                    trend3 = f"Risk: {r3} (down from {prev_r3})"
+                    trend3 = f"{emoji3} Risk: {r3} (down from {prev_r3})"
                 else:
-                    trend3 = f"Risk: {r3}"
+                    trend3 = f"{emoji3} Risk: {r3}"
             else:
-                trend3 = f"Risk: {r3}"
+                trend3 = f"{emoji3} Risk: {r3}"
 
             if not content:
                 if r2 in ["ENH", "MDT"]:
