@@ -532,12 +532,12 @@ if day1_new:
             if RISK_RANK[risk] > RISK_RANK[prev_risk]:
                 trend = (
                     f"**{emoji} Risk: {risk}** "
-                    f" **(⚠️ UP FROM {prev_risk})**\n\n"
+                    f" **(⚠️ UP FROM {prev_risk})**\n"
                 )
             else:
-                trend = f"**{emoji} Risk: {risk}**\n\n"
+                trend = f"**{emoji} Risk: {risk}**\n"
         else:
-            trend = f"**{emoji} Risk: {risk}**\n\n"
+            trend = f"**{emoji} Risk: {risk}**\n"
 
         # ping logic
         ping = None
@@ -588,7 +588,7 @@ if day1_new:
 
         if nearest:
             nearest_emoji = RISK_EMOJIS.get(nearest[0], "")
-            lines.append(f"\n\n Nearest higher risk: {nearest_emoji} {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
+            lines.append(f"\n Nearest higher risk: {nearest_emoji} {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
         else:
             lines.append("No higher risk levels in CONUS.")
 
