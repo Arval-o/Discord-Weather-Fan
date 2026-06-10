@@ -525,6 +525,7 @@ if day1_new:
     img = upload_image("day1otlk.png")
     if img:
         risk, sub, nearest, found = get_risk(1, POINT)
+        print("Day 1 sub risks:", sub)
         prev_risk = state.get("last_day1_risk")
         trend = ""
         emoji = RISK_EMOJIS.get(risk, "")
