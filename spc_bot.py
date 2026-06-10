@@ -1,21 +1,116 @@
-import feedparser
-import requests
-import os
-import json
-import time
 import base64
-from shapely.geometry import shape, Point, box, MultiPolygon
-from shapely.ops import nearest_points, unary_union
+import hashlib
+import json
+import os
+import time
+from datetime import datetime, timezone
 from math import atan2, degrees
 
+import feedparser
+import requests
+from shapely.geometry import MultiPolygon, Point, box, shape
+from shapely.ops import nearest_points, unary_union
+
 # === CONFIG ===
+
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 GH_TOKEN = os.environ["GH_TOKEN"]
 
 REPO = "arval-o/Discord-Weather-Fan"
 BRANCH = "main"
 PAGE_FOLDER = "docs"
-STATE_FILE = "last_id.txt"
+
+STATE_FILE = "state.json"
+
+RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
+
+ROLE_ID = "1485401778962043021"
+MY_ID = "1109224984984956968"
+
+# Anti-spam protection
+POST_COOLDOWN_SECONDS = 60 * 60 * 3  # 3 hours
+
+# Home location
+HOME_LON = -80.096278
+HOME_LAT = 40.615111
+
+POINT = Point(HOME_LON, HOME_LAT)
+
+# ~0.5 mile sampling radius
+SAMPLE_RADIUS = 0.008
+
+# Risk ranking
+RISK_ORDER = [
+    "NONE",
+    "TSTM",
+    "MRGL",
+    "SLGT",
+    "ENH",
+    "MDT",
+    "HIGH"
+]
+
+RISK_RANK = {
+    risk: idx
+    for idx, risk in enumerate(RISK_ORDER)
+}
+
+# NOAA MapServer base URL
+MAPSERVER = (
+    "https://mapservices.weather.noaa.gov/"
+    "vector/rest/services/outlooks/SPC_wx_outlks/MapServer"
+)
+
+# Layer IDs
+LAYER_IDS = {
+    "cat": {
+        1: 1,
+        2: 9,
+        3: 17
+    },
+    "torn": {
+        1: 3
+    },
+    "hail": {
+        1: 5
+    },
+    "wind": {
+        1: 7
+    }
+}
+
+# SPC categorical DN values
+DN_TO_RISK = {
+    2: "TSTM",
+    3: "MRGL",
+    4: "SLGT",
+    5: "ENH",
+    6: "MDT",
+    8: "HIGH"
+}
+
+# Discord colors
+RISK_COLORS = {
+    "NONE": 0x808080,
+    "TSTM": 0x90EE90,
+    "MRGL": 0x006400,
+    "SLGT": 0xFFFF00,
+    "ENH": 0xFFA500,
+    "MDT": 0xFF0000,
+    "HIGH": 0x8B0000,
+}
+
+# Display emojis
+RISK_EMOJIS = {
+    "NONE": "⬜",
+    "TSTM": "🟦",
+    "MRGL": "🟩",
+    "SLGT": "🟨",
+    "ENH": "🟧",
+    "MDT": "🟥",
+    "HIGH": "⚠️",
+}
+
 DEFAULT_STATE = {
     "posted_day1": None,
     "posted_day2": None,
@@ -36,62 +131,6 @@ DEFAULT_STATE = {
     "pinged_enh": False,
     "pinged_mdt": False,
     "pinged_high": False,
-}
-RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
-
-ROLE_ID = "1485401778962043021"
-MY_ID = "1109224984984956968"
-
-# Your coordinate
-POINT = Point(-80.096278, 40.615111)
-SAMPLE_RADIUS = 0.008  # ~0.5 mi in degrees
-
-# Risk order — used for all comparisons
-RISK_ORDER = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
-
-# NOAA MapServer base URL
-MAPSERVER = "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer"
-
-# Layer IDs on the MapServer
-# Day 1: Categorical=1, Prob Tornado=3, Prob Hail=5, Prob Wind=7
-# Day 2: Categorical=9
-# Day 3: Categorical=17
-LAYER_IDS = {
-    "cat":  {1: 1,  2: 9,  3: 17},
-    "torn": {1: 3},
-    "hail": {1: 5},
-    "wind": {1: 7},
-}
-
-# The categorical `dn` integer → internal risk key
-DN_TO_RISK = {
-    2: "TSTM",
-    3: "MRGL",
-    4: "SLGT",
-    5: "ENH",
-    6: "MDT",
-    8: "HIGH",
-}
-
-# Risk colors and emojis
-RISK_COLORS = {
-    "NONE": 0x808080,
-    "TSTM": 0x90ee90,
-    "MRGL": 0x006400,
-    "SLGT": 0xFFFF00,
-    "ENH": 0xFFA500,
-    "MDT": 0xFF0000,
-    "HIGH": 0xFF0000
-}
-
-RISK_EMOJIS = {
-    "NONE": "⬜",
-    "TSTM": "🟦",
-    "MRGL": "🟩",
-    "SLGT": "🟨",
-    "ENH": "🟧",
-    "MDT": "🟥",
-    "HIGH": "⚠️"
 }
 
 # === LOAD STATE ===
