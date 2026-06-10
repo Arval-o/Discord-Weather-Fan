@@ -330,6 +330,7 @@ def get_risk(day, point):
             if geom.intersects(sample_box):
                 dn = f["properties"].get("dn")
                 risk_key = DN_TO_RISK.get(dn, "NONE")
+                print(prob_key, f["properties"])
                 if risk_key != "NONE":
                     found.append(risk_key)
         except Exception:
