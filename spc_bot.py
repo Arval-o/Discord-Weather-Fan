@@ -747,6 +747,11 @@ if day23_ready:
         # Ping logic
         # --------------------
 
+        highest_risk = max(
+            [r2, r3],
+            key=lambda r: RISK_RANK[r]
+        )
+
         if not discord_content:
             upgrade = False
             
