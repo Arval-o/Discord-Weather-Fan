@@ -16,6 +16,27 @@ REPO = "arval-o/Discord-Weather-Fan"
 BRANCH = "main"
 PAGE_FOLDER = "docs"
 STATE_FILE = "last_id.txt"
+DEFAULT_STATE = {
+    "posted_day1": None,
+    "posted_day2": None,
+    "posted_day3": None,
+
+    "waiting_day2": None,
+    "waiting_day3": None,
+
+    "last_day1_risk": None,
+    "last_day2_risk": None,
+    "last_day3_risk": None,
+
+    "last_message_hash": "",
+    "last_post_time": 0,
+
+    "ping_date": "",
+    "pinged_slgt": False,
+    "pinged_enh": False,
+    "pinged_mdt": False,
+    "pinged_high": False,
+}
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
 ROLE_ID = "1485401778962043021"
@@ -24,8 +45,6 @@ MY_ID = "1109224984984956968"
 # Your coordinate
 POINT = Point(-80.096278, 40.615111)
 SAMPLE_RADIUS = 0.008  # ~0.5 mi in degrees
-
-PRIORITY_ORDER = ["2000", "1630", "1300", "0600", "0100"]
 
 # Risk order — used for all comparisons
 RISK_ORDER = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
