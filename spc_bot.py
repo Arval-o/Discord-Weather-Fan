@@ -131,6 +131,8 @@ DEFAULT_STATE = {
     "pinged_enh": False,
     "pinged_mdt": False,
     "pinged_high": False,
+
+    "message_id": None,
 }
 
 # === STATE MANAGEMENT ===
@@ -834,8 +836,20 @@ if embeds:
         if discord_content:
             final_content += f" {discord_content}"
 
+        old_message_id = state.get("message_id")
+
+        if old_message_id:
+            try:
+                requests.delete(
+                    f"{WEBHOOK_URL}/messages/{old_message_id}",
+                    timeout=15
+                )
+                print(f"Deleted old message {old_message_id}")
+            except Exception as e:
+                print(f"Delete failed: {e}")
+
         discord_response = requests.post(
-            WEBHOOK_URL,
+            f"{WEBHOOK_URL}?wait=true",
             json={
                 "content": final_content,
                 "embeds": embeds
@@ -843,9 +857,12 @@ if embeds:
             timeout=30
         )
 
-        if discord_response.status_code == 204:
+        if discord_response.status_code == 200:
 
-            # Anti-spam tracking
+            data = discord_response.json()
+
+            pending_state["message_id"] = data["id"]
+           
             pending_state["last_message_hash"] = (
                 message_hash
             )
