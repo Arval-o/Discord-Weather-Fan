@@ -133,46 +133,121 @@ DEFAULT_STATE = {
     "pinged_high": False,
 }
 
-# === LOAD STATE ===
-try:
-    with open(STATE_FILE, "r") as f:
-        last_id = json.load(f)
-except:
-    last_id = {}
+# === STATE MANAGEMENT ===
+
+def load_state():
+    try:
+        with open(STATE_FILE, "r") as f:
+            state = json.load(f)
+
+        # Ensure newly-added keys exist
+        for key, value in DEFAULT_STATE.items():
+            state.setdefault(key, value)
+
+        return state
+
+    except Exception as e:
+        print(f"State load failed ({e}), creating fresh state")
+        return DEFAULT_STATE.copy()
+
+
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+state = load_state()
+
+# === DAILY PING RESET ===
+
+today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+if state["ping_date"] != today:
+    print("Resetting daily ping flags")
+
+    state["ping_date"] = today
+
+    state["pinged_slgt"] = False
+    state["pinged_enh"] = False
+    state["pinged_mdt"] = False
+    state["pinged_high"] = False
+
+    save_state(state)
 
 # === FETCH RSS ===
+
 feed = feedparser.parse(RSS_URL)
-entries = feed.entries[::-1]
 
-# === DAY 1 COLLECTION ===
-day1_all = []
-for entry in entries:
-    t = entry.title.lower()
-    if "day 1" in t:
-        for tag in PRIORITY_ORDER:
-            if tag in t:
-                day1_all.append((tag, entry))
-day1_all.sort(key=lambda x: PRIORITY_ORDER.index(x[0]))
+# Newest first
+entries = list(reversed(feed.entries))
 
-day1_to_post = None
-last_priority = last_id.get("1_priority")
-for tag, entry in day1_all:
-    if entry.id == last_id.get("1"):
-        continue
-    if last_priority and PRIORITY_ORDER.index(tag) > PRIORITY_ORDER.index(last_priority):
-        continue
-    day1_to_post = (entry, tag)
-    break
+# === OUTLOOK COLLECTION ===
 
-# === DAY 2/3 COLLECTION ===
+day1 = None
 day2 = None
 day3 = None
+
 for entry in entries:
-    t = entry.title.lower()
-    if "day 2" in t and not day2:
+
+    title = entry.title.lower()
+
+    if "day 1" in title and day1 is None:
+        day1 = entry
+
+    elif "day 2" in title and day2 is None:
         day2 = entry
-    elif "day 3" in t and not day3:
+
+    elif "day 3" in title and day3 is None:
         day3 = entry
+
+# === OUTLOOK KEYS ===
+
+def outlook_key(entry):
+    """
+    Stable identifier for outlook tracking.
+
+    We intentionally avoid RSS GUIDs because SPC can
+    occasionally republish entries.
+
+    Title + link is stable enough for our purposes.
+    """
+
+    if not entry:
+        return None
+
+    raw = f"{entry.title}|{entry.link}"
+
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+day1_key = outlook_key(day1)
+day2_key = outlook_key(day2)
+day3_key = outlook_key(day3)
+
+# === NEW OUTLOOK DETECTION ===
+
+day1_new = (
+    day1_key is not None
+    and day1_key != state["posted_day1"]
+)
+
+day2_new = (
+    day2_key is not None
+    and day2_key != state["posted_day2"]
+)
+
+day3_new = (
+    day3_key is not None
+    and day3_key != state["posted_day3"]
+)
+
+print("=== Outlook Status ===")
+print(f"Day 1 new: {day1_new}")
+print(f"Day 2 new: {day2_new}")
+print(f"Day 3 new: {day3_new}")
+
+print("=== State ===")
+print(json.dumps(state, indent=2))
 
 # === IMAGE UPLOAD ===
 def upload_image(filename):
@@ -292,7 +367,7 @@ def get_risk(day, point):
     # just the closest polygon boundary regardless of level.
     # Strategy: find the closest polygon for each level above current risk,
     # then pick the lowest such level (i.e. the next step up).
-    current_idx = RISK_ORDER.index(risk)
+    current_rank = RISK_RANK[risk]
     
     # Build a dict: risk_level -> list of (dist_miles, nearest_pt)
     higher_by_level = {}
@@ -301,8 +376,8 @@ def get_risk(day, point):
             geom = shape(f["geometry"])
             dn = f["properties"].get("dn")
             cat = DN_TO_RISK.get(dn, "NONE")
-            cat_idx = RISK_ORDER.index(cat)
-            if cat_idx <= current_idx:
+            cat_rank = RISK_RANK[cat]
+            if cat_rank <= current_rank:
                 continue
             boundary = geom_boundary(geom)
             dist_miles = boundary.distance(point) * 69
@@ -314,7 +389,7 @@ def get_risk(day, point):
 
     nearest = None
     if higher_by_level:
-        for r in RISK_ORDER[current_idx + 1:]:
+        for r in RISK_ORDER[current_rank + 1:]:
             if r in higher_by_level:
                 dist_miles, nearest_pt = higher_by_level[r]
     
@@ -332,38 +407,195 @@ def get_risk(day, point):
                 break
 
     return risk, sub, nearest, found
+def risk_change(old_risk, new_risk):
+    """
+    Compare risks within the SAME forecast day.
 
-# === BUILD EMBEDS ===
+    Returns:
+        "upgrade"
+        "downgrade"
+        "same"
+        None
+    """
+
+    if not old_risk:
+        return None
+
+    old_rank = RISK_RANK[old_risk]
+    new_rank = RISK_RANK[new_risk]
+
+    if new_rank > old_rank:
+        return "upgrade"
+
+    if new_rank < old_rank:
+        return "downgrade"
+
+    return "same"
+
+# === DISCORD MESSAGE BUILDING ===
+
 embeds = []
-content = ""
 
-# Track what we intend to commit to state — only written on successful Discord POST
+discord_content = ""
+
 pending_state = {}
+
+post_day1 = False
+post_day23 = False
+
+message_parts = []
+
+def build_message_hash(parts):
+    """
+    Create a stable hash representing the
+    exact outlooks being posted.
+    """
+
+    raw = json.dumps(parts, sort_keys=True)
+
+    return hashlib.sha256(
+        raw.encode()
+    ).hexdigest()
+
+# helper functs
+
+def build_risk_text(risk, previous_risk):
+    emoji = RISK_EMOJIS[risk]
+
+    change = risk_change(previous_risk, risk)
+
+    if change == "upgrade":
+        return f"{emoji} {risk}\n⬆ Upgrade from {previous_risk}"
+
+    if change == "downgrade":
+        return f"{emoji} {risk}\n⬇ Lower than previous outlook ({previous_risk})"
+
+    return f"{emoji} {risk}"
+
+
+def should_ping_day1(state, risk, previous_risk):
+    """
+    Day 1:
+    SLGT / ENH / MDT / HIGH once per day.
+    After first ping, only upgrades.
+    """
+
+    change = risk_change(previous_risk, risk)
+
+    if risk == "HIGH" and not state["pinged_high"]:
+        return "@everyone"
+
+    if risk == "MDT" and not state["pinged_mdt"]:
+        return f"<@&{ROLE_ID}>"
+
+    if risk == "ENH" and not state["pinged_enh"]:
+        return f"<@&{ROLE_ID}>"
+
+    if risk == "SLGT" and not state["pinged_slgt"]:
+        return f"<@&{ROLE_ID}>"
+
+    if change == "upgrade":
+
+        if risk == "HIGH":
+            return "@everyone"
+
+        if risk in ["SLGT", "ENH", "MDT"]:
+            return f"<@&{ROLE_ID}>"
+
+    return None
+
+
+def should_ping_day23(state, risk, previous_risk):
+    """
+    Day 2/3:
+    ENH / MDT / HIGH only.
+    """
+
+    change = risk_change(previous_risk, risk)
+
+    if risk == "HIGH" and not state["pinged_high"]:
+        return "@everyone"
+
+    if risk == "MDT" and not state["pinged_mdt"]:
+        return f"<@&{ROLE_ID}>"
+
+    if risk == "ENH" and not state["pinged_enh"]:
+        return f"<@&{ROLE_ID}>"
+
+    if change == "upgrade":
+
+        if risk == "HIGH":
+            return "@everyone"
+
+        if risk in ["ENH", "MDT"]:
+            return f"<@&{ROLE_ID}>"
+
+    return None
 
 # --- DAY 1 ---
 if day1_to_post:
     entry, tag = day1_to_post
     print(f"Prepared Day 1 {tag}")
     img = upload_image(f"day1otlk_{tag}.png")
-    if img:
+     if img:
         risk, sub, nearest, found = get_risk(1, POINT)
-        prev_risk = last_id.get("1_risk")
+        prev_risk = state.get("last_day1_risk")
         trend = ""
         emoji = RISK_EMOJIS.get(risk, "")
         if prev_risk and prev_risk != risk:
-            if RISK_ORDER.index(risk) > RISK_ORDER.index(prev_risk):
-                trend = f"{emoji} Risk: {risk} ** (⚠️ UP FROM {prev_risk})**"
+            if RISK_RANK[risk] > RISK_RANK[prev_risk]:
+                trend = (
+                    f"{emoji} Risk: {risk} "
+                    f"**(⚠️ UP FROM {prev_risk})**"
+                )
+            elif RISK_RANK[risk] < RISK_RANK[prev_risk]:
+                trend = (
+                    f"{emoji} Risk: {risk} "
+                    f"(down from {prev_risk})"
+                )
             else:
-                trend = f"{emoji} Risk: {risk} (down from {prev_risk})"
+                trend = f"{emoji} Risk: {risk}"
         else:
             trend = f"{emoji} Risk: {risk}"
 
         # ping logic
-        if risk in ["ENH", "MDT"]:
-            content = f"<@&{ROLE_ID}>"
-        elif risk == "HIGH":
-            content = "@everyone"
+        ping = None
+        change_is_upgrade = (
+            prev_risk
+            and RISK_RANK[risk] > RISK_RANK[prev_risk]
+        )
+        if risk == "HIGH":
 
+            if (
+                not state["pinged_high"]
+                or change_is_upgrade
+            ):
+                ping = "@everyone"
+                pending_state["pinged_high"] = True
+        elif risk == "MDT":
+            if (
+                not state["pinged_mdt"]
+                or change_is_upgrade
+            ):
+                ping = f"<@&{ROLE_ID}>"
+                pending_state["pinged_mdt"] = True
+        elif risk == "ENH":
+            if (
+                not state["pinged_enh"]
+                or change_is_upgrade
+            ):
+                ping = f"<@&{ROLE_ID}>"
+                pending_state["pinged_enh"] = True
+        elif risk == "SLGT":
+            if (
+                not state["pinged_slgt"]
+                or change_is_upgrade
+            ):
+                ping = f"<@&{ROLE_ID}>"
+                pending_state["pinged_slgt"] = True
+        if ping and not discord_content:
+            discord_content = ping
+            
         lines = [trend]
         tor, wind, hail, sig = sub["tornado"], sub["wind"], sub["hail"], sub["sig"]
         if tor or wind or hail:
@@ -388,88 +620,271 @@ if day1_to_post:
         })
 
         # Stage state updates — not applied until Discord confirms
-        pending_state["1"] = entry.id
-        pending_state["1_priority"] = tag
-        pending_state["1_risk"] = risk
+        pending_state["posted_day1"] = day1_key
+        pending_state["last_day1_risk"] = risk
 
+        message_parts.append(
+            f"day1:{day1_key}"
+        )
+         
 # --- DAY 2/3 ---
-if day2 and day3:
-    if day2.id != last_id.get("2") or day3.id != last_id.get("3"):
-        print("Prepared Day 2/3")
-        img2 = upload_image("day2otlk.png")
-        img3 = upload_image("day3otlk.png")
-        if img2 and img3:
-            r2, sub2, nearest2, found2 = get_risk(2, POINT)
-            r3, sub3, nearest3, found3 = get_risk(3, POINT)
+# --- DAY 2 / DAY 3 PAIRING LOGIC ---
 
-            # trend messages — use RISK_ORDER for comparison, not colors
-            prev_r2 = last_id.get("2_risk")
-            emoji2 = RISK_EMOJIS.get(r2, "")
-            trend2 = ""
-            if prev_r2:
-                if RISK_ORDER.index(r2) > RISK_ORDER.index(prev_r2):
-                    trend2 = f"{emoji2} Risk: {r2} ** (⚠️ UP FROM {prev_r2})**"
-                elif RISK_ORDER.index(r2) < RISK_ORDER.index(prev_r2):
-                    trend2 = f"{emoji2} Risk: {r2} (down from {prev_r2})"
-                else:
-                    trend2 = f"{emoji2} Risk: {r2}"
+day23_ready = False
+
+if day2_new and day3_new:
+
+    day23_ready = True
+
+elif day2_new and not day3_new:
+
+    print("Holding Day 2 until Day 3 updates")
+
+    pending_state["waiting_day2"] = day2_key
+
+elif day3_new and not day2_new:
+
+    print("Holding Day 3 until Day 2 updates")
+
+    pending_state["waiting_day3"] = day3_key
+
+elif (
+    state.get("waiting_day2") == day2_key
+    and day3_new
+):
+
+    day23_ready = True
+
+elif (
+    state.get("waiting_day3") == day3_key
+    and day2_new
+):
+
+    day23_ready = True
+
+
+# --- DAY 2 / DAY 3 POSTING ---
+
+if day23_ready:
+
+    print("Prepared Day 2/3")
+
+    img2 = upload_image("day2otlk.png")
+    img3 = upload_image("day3otlk.png")
+
+    if img2 and img3:
+
+        r2, sub2, nearest2, found2 = get_risk(2, POINT)
+        r3, sub3, nearest3, found3 = get_risk(3, POINT)
+
+        # --------------------
+        # Day 2 trend
+        # --------------------
+
+        prev_r2 = state.get("last_day2_risk")
+
+        emoji2 = RISK_EMOJIS.get(r2, "")
+
+        trend2 = ""
+
+        if prev_r2:
+
+            if RISK_RANK[r2] > RISK_RANK[prev_r2]:
+                trend2 = (
+                    f"{emoji2} Risk: {r2} "
+                    f"** (⚠️ UP FROM {prev_r2})**"
+                )
+
+            elif RISK_RANK[r2] < RISK_RANK[prev_r2]:
+                trend2 = (
+                    f"{emoji2} Risk: {r2} "
+                    f"(down from {prev_r2})"
+                )
+
             else:
                 trend2 = f"{emoji2} Risk: {r2}"
 
-            prev_r3 = last_id.get("3_risk")
-            emoji3 = RISK_EMOJIS.get(r3, "")
-            trend3 = ""
-            if prev_r3:
-                if RISK_ORDER.index(r3) > RISK_ORDER.index(prev_r3):
-                    trend3 = f"{emoji3} Risk: {r3} ** (⚠️ UP FROM {prev_r3})**"
-                elif RISK_ORDER.index(r3) < RISK_ORDER.index(prev_r3):
-                    trend3 = f"{emoji3} Risk: {r3} (down from {prev_r3})"
-                else:
-                    trend3 = f"{emoji3} Risk: {r3}"
+        else:
+
+            trend2 = f"{emoji2} Risk: {r2}"
+
+        # --------------------
+        # Day 3 trend
+        # --------------------
+
+        prev_r3 = state.get("last_day3_risk")
+
+        emoji3 = RISK_EMOJIS.get(r3, "")
+
+        trend3 = ""
+
+        if prev_r3:
+
+            if RISK_RANK[r3] > RISK_RANK[prev_r3]:
+                trend3 = (
+                    f"{emoji3} Risk: {r3} "
+                    f"** (⚠️ UP FROM {prev_r3})**"
+                )
+
+            elif RISK_RANK[r3] < RISK_RANK[prev_r3]:
+                trend3 = (
+                    f"{emoji3} Risk: {r3} "
+                    f"(down from {prev_r3})"
+                )
+
             else:
                 trend3 = f"{emoji3} Risk: {r3}"
 
-            if not content:
-                if r2 in ["ENH", "MDT"]:
-                    content = f"<@&{ROLE_ID}>"
-                elif r2 == "HIGH":
-                    content = "@everyone"
+        else:
 
-            embeds.append({
-                "title": "SPC Day 2 Outlook",
-                "url": day2.link,
-                "description": trend2,
-                "color": RISK_COLORS.get(r2, 0x808080),
-                "thumbnail": {"url": img2}
-            })
-            embeds.append({
-                "title": "SPC Day 3 Outlook",
-                "url": day3.link,
-                "description": trend3,
-                "color": RISK_COLORS.get(r3, 0x808080),
-                "thumbnail": {"url": img3}
-            })
+            trend3 = f"{emoji3} Risk: {r3}"
 
-            # Stage state updates
-            pending_state["2"] = day2.id
-            pending_state["3"] = day3.id
-            pending_state["2_risk"] = r2
-            pending_state["3_risk"] = r3
+        # --------------------
+        # Ping logic
+        # --------------------
 
-# === SEND TO DISCORD ===
+        if not discord_content:
+
+            highest_risk = max(
+                [r2, r3],
+                key=lambda r: RISK_RANK[r]
+            )
+
+            previous_highest = max(
+                [
+                    prev_r2 or "NONE",
+                    prev_r3 or "NONE"
+                ],
+                key=lambda r: RISK_RANK[r]
+            )
+
+            upgrade = (
+                RISK_RANK[highest_risk]
+                > RISK_RANK[previous_highest]
+            )
+
+            if highest_risk == "HIGH":
+
+                if (
+                    not state["pinged_high"]
+                    or upgrade
+                ):
+                    discord_content = "@everyone"
+                    pending_state["pinged_high"] = True
+
+            elif highest_risk == "MDT":
+
+                if (
+                    not state["pinged_mdt"]
+                    or upgrade
+                ):
+                    discord_content = f"<@&{ROLE_ID}>"
+                    pending_state["pinged_mdt"] = True
+
+            elif highest_risk == "ENH":
+
+                if (
+                    not state["pinged_enh"]
+                    or upgrade
+                ):
+                    discord_content = f"<@&{ROLE_ID}>"
+                    pending_state["pinged_enh"] = True
+
+        embeds.append({
+            "title": "SPC Day 2 Outlook",
+            "url": day2.link,
+            "description": trend2,
+            "color": RISK_COLORS.get(r2, 0x808080),
+            "thumbnail": {"url": img2}
+        })
+
+        embeds.append({
+            "title": "SPC Day 3 Outlook",
+            "url": day3.link,
+            "description": trend3,
+            "color": RISK_COLORS.get(r3, 0x808080),
+            "thumbnail": {"url": img3}
+        })
+
+        # Stage state updates
+
+        pending_state["posted_day2"] = day2_key
+        pending_state["posted_day3"] = day3_key
+
+        pending_state["waiting_day2"] = None
+        pending_state["waiting_day3"] = None
+
+        pending_state["last_day2_risk"] = r2
+        pending_state["last_day3_risk"] = r3
+
+        message_parts.append(f"day2:{day2_key}")
+        message_parts.append(f"day3:{day3_key}")
+        
 if embeds:
-    final_content = f"<@{MY_ID}>"
-    if content:
-        final_content += f" {content}"
-    discord_response = requests.post(WEBHOOK_URL, json={"content": final_content, "embeds": embeds})
-    if discord_response.status_code == 204:
-        # Only now apply all pending state updates and persist
-        last_id.update(pending_state)
-        with open(STATE_FILE, "w") as f:
-            json.dump(last_id, f)
-        print("Posted to Discord")
+
+    # Build duplicate-protection hash
+    message_hash = build_message_hash(
+        message_parts
+    )
+
+    now = int(time.time())
+
+    if (
+        message_hash == state.get("last_message_hash", "")
+        and
+        now - state.get("last_post_time", 0)
+        < POST_COOLDOWN_SECONDS
+    ):
+
+        print(
+            "Duplicate message blocked "
+            "(hash + cooldown)"
+        )
+
     else:
-        print("Discord error:", discord_response.text)
-        print("State NOT saved — will retry next run")
+
+        final_content = f"<@{MY_ID}>"
+
+        if discord_content:
+            final_content += f" {discord_content}"
+
+        discord_response = requests.post(
+            WEBHOOK_URL,
+            json={
+                "content": final_content,
+                "embeds": embeds
+            },
+            timeout=30
+        )
+
+        if discord_response.status_code == 204:
+
+            # Anti-spam tracking
+            pending_state["last_message_hash"] = (
+                message_hash
+            )
+
+            pending_state["last_post_time"] = now
+
+            # Apply all staged updates
+            state.update(pending_state)
+
+            save_state(state)
+
+            print("Posted to Discord")
+
+        else:
+
+            print(
+                "Discord error:",
+                discord_response.text
+            )
+
+            print(
+                "State NOT saved — "
+                "will retry next run"
+            )
+
 else:
+
     print("Nothing to post")
