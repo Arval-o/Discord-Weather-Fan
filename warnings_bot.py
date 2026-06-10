@@ -64,25 +64,69 @@ for alert in data.get("features", []):
 
     # --- Clean text safely ---
     headline = props.get("headline") or event
-    description = " ".join((props.get("description") or "No description available.").split())[:800]
-    instruction = " ".join((props.get("instruction") or "No instructions provided.").split())[:500]
+    description = " ".join((props.get("description") or "No description available.").split())[:2500]
+    instruction = " ".join((props.get("instruction") or "No instructions provided.").split())[:1200]
     severity = props.get("severity") or "Unknown"
 
-    # --- Color + emoji ---
-    if event == "Tornado Warning":
-        color = 15158332  # red
+    event_lower = event.lower()
+
+    # default fallback
+    color = 3447003
+    emoji = "⚠️"
+    ping_everyone = False
+    
+
+    if "tornado warning" in event_lower:
+        color = 16711680 
         emoji = "🌪️"
-    elif event == "Severe Thunderstorm Warning":
-        color = 16776960  # yellow
+        ping_everyone = True
+    
+    elif "tornado watch" in event_lower:
+        color = 0xF4C2C2 
+        emoji = "🌪️"
+        ping_role = True
+
+    elif "severe thunderstorm warning" in event_lower:
+        color = 16776960 
         emoji = "⛈️"
-    else:
-        color = 3447003  # blue-ish for others
-        emoji = "⚠️"
+        ping_role = True
+    
+    # --- Severe Thunderstorm Watch (soft green-yellow) ---
+    elif "severe thunderstorm watch" in event_lower:
+        color = 0xC9D96C  # soft green-yellow
+        emoji = "⛅"
+    
+    # --- Blizzard Warning ---
+    elif "blizzard warning" in event_lower:
+        color = 0xFF8C00  # orange
+        emoji = "❄️"
+        ping_everyone = True
+    
+    # --- Snow-related (general) ---
+    elif "snow" in event_lower:
+        color = 0xFFFFFF  # white
+        emoji = "❄️"
+    
+    # --- Flood Warning ---
+    elif "flood warning" in event_lower:
+        color = 0x006400  
+        emoji = "🌊"
+    
+    # --- Flash Flood Warning ---
+    elif "flash flood warning" in event_lower:
+        color = 65280  
+        emoji = "🌊"
+        ping_role = True
+    
+    # --- Advisory ---
+    elif "advisory" in event_lower:
+        color = 0x3498DB  # blue
+        emoji = "ℹ️"
 
     # --- Ping logic ---
-    if event == "Tornado Warning":
+    if ping_everyone:
         content = f"@everyone {emoji} **{event}**"
-    elif event == "Severe Thunderstorm Warning":
+    elif ping_role:
         if ROLE_ID:
             content = f"<@&{ROLE_ID}> {emoji} **{event}**"
         else:
@@ -99,7 +143,6 @@ for alert in data.get("features", []):
         "description": description,
         "color": color,
         "fields": [
-            {"name": "Area", "value": area, "inline": False},
             {"name": "Severity", "value": severity, "inline": True},
             {"name": "Instructions", "value": instruction, "inline": False},
             {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/station/kpbz/standard)", "inline": False}
