@@ -656,6 +656,7 @@ if day23_ready:
 
     print("Prepared Day 2/3")
 
+
     img2 = upload_image("day2otlk.png")
     img3 = upload_image("day3otlk.png")
 
@@ -859,6 +860,15 @@ if embeds:
             save_state(state)
 
             print("Posted to Discord")
+            print("DAY1 SUB:", sub)
+
+            print("DAY2 TITLE:", day2.title)
+            print("DAY2 LINK :", day2.link)
+            
+            print("DAY3 TITLE:", day3.title)
+            print("DAY3 LINK :", day3.link)
+
+            print(feed.entries[0])
 
         else:
 
@@ -875,3 +885,12 @@ if embeds:
 else:
 
     print("Nothing to post")
+    print("DAY1 SUB:", sub)
+
+    print("DAY2 TITLE:", day2.title)
+    print("DAY2 LINK :", day2.link)
+    
+    print("DAY3 TITLE:", day3.title)
+    print("DAY3 LINK :", day3.link)
+
+    print(feed.entries[0])
