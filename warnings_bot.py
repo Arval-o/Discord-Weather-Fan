@@ -62,6 +62,15 @@ for alert in data.get("features", []):
     if alert_id in posted_ids:
         continue
 
+    def is_pds(props):
+        text = " ".join([
+            props.get("headline") or "",
+            props.get("description") or "",
+            props.get("instruction") or ""
+        ]).lower()
+    
+        return "particularly dangerous situation" in text
+
     # --- Clean text safely ---
     headline = props.get("headline") or event
     description = " ".join((props.get("description") or "No description available.").split())[:2500]
@@ -70,35 +79,54 @@ for alert in data.get("features", []):
 
     event_lower = event.lower()
 
+    pds = is_pds(props)
+
     # default fallback
     color = 3447003
     emoji = "⚠️"
     ping_everyone = False
-    
+    pds_header = ""
+    pds_footer = ""
 
+    if pds:
+        ping_everyone = True
+
+        pds_header = "🚨 **THIS IS A PARTICULARLY DANGEROUS SITUATION!!!** 🚨\n\n"
+    
+        footer_text = f"ONCE AGAIN, THIS IS NOT A REGULAR {event.upper()}! AN ABNORMALLY SEVERE SITUATION FOR THIS AREA IS UNFOLDING!"
+    
+        if "tornado warning" in event_lower:
+            footer_text += " TAKE COVER NOW!!!"
+        elif "severe thunderstorm warning" in event_lower:
+            footer_text += " TAKE COVER NOW!!!"
+        elif "blizzard warning" in event_lower:
+            footer_text += " TAKE COVER NOW!!!"
+    
+        pds_footer = f"\n\n🚨 **{footer_text}** 🚨"
+    
     if "tornado warning" in event_lower:
-        color = 16711680 
+        color = 0xFF00FF if pds else 16711680 
         emoji = "🌪️"
         ping_everyone = True
     
     elif "tornado watch" in event_lower:
-        color = 0xF4C2C2 
+        color = 0x8B0000 if pds else 0xF4C2C2 
         emoji = "🌪️"
         ping_role = True
 
     elif "severe thunderstorm warning" in event_lower:
-        color = 16776960 
+        color = 0xFF0000 if pds else 16776960 
         emoji = "⛈️"
         ping_role = True
     
     # --- Severe Thunderstorm Watch (soft green-yellow) ---
     elif "severe thunderstorm watch" in event_lower:
-        color = 0xC9D96C  # soft green-yellow
+        color = 0xB8860B if pds else 0xC9D96C  
         emoji = "⛅"
     
     # --- Blizzard Warning ---
     elif "blizzard warning" in event_lower:
-        color = 0xFF8C00  # orange
+        color = 0x000000 if pds else 0xFF8C00  
         emoji = "❄️"
         ping_everyone = True
     
@@ -109,12 +137,12 @@ for alert in data.get("features", []):
     
     # --- Flood Warning ---
     elif "flood warning" in event_lower:
-        color = 0x006400  
+        color = 0xFFFF00 if pds else 0x006400  
         emoji = "🌊"
     
     # --- Flash Flood Warning ---
     elif "flash flood warning" in event_lower:
-        color = 65280  
+        color = 0xFFFF00 if pds else 65280  
         emoji = "🌊"
         ping_role = True
     
