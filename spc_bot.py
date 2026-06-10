@@ -534,9 +534,9 @@ def should_ping_day23(state, risk, previous_risk):
 
 # --- DAY 1 ---
 if day1_new:
-    entry = day1
-    print("Prepared Day 1")
-    img = upload_image("day1otlk.png")
+    entry, tag = day1
+    print("Prepared Day 1 {tag}")
+    img = upload_image("day1otlk_{tag}.png")
     if img:
         risk, sub, nearest, found = get_risk(1, POINT)
         prev_risk = state.get("last_day1_risk")
