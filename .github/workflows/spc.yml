@@ -51,7 +51,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git pull --rebase origin main
+          git add -A
+          git stash push -u
+          git pull --rebase --autostash origin main
+          git stash pop
           
           git add last_warnings.txt state.json
           git commit -m "Update bot state files" || echo "No changes to commit"
