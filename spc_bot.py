@@ -183,9 +183,9 @@ entries = list(reversed(feed.entries))
 
 # === OUTLOOK COLLECTION ===
 
-day1 = None
-day2 = None
-day3 = None
+day1 = (entry, tag)
+day2 = (entry, tag)
+day3 = (entry, tag)
 
 for entry in entries:
 
