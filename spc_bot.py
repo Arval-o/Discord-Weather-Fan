@@ -533,11 +533,11 @@ def should_ping_day23(state, risk, previous_risk):
     return None
 
 # --- DAY 1 ---
-if day1_to_post:
-    entry, tag = day1_to_post
-    print(f"Prepared Day 1 {tag}")
-    img = upload_image(f"day1otlk_{tag}.png")
-     if img:
+if day1_new:
+    entry = day1
+    print("Prepared Day 1")
+    img = upload_image("day1otlk.png")
+    if img:
         risk, sub, nearest, found = get_risk(1, POINT)
         prev_risk = state.get("last_day1_risk")
         trend = ""
@@ -640,13 +640,17 @@ elif day2_new and not day3_new:
 
     print("Holding Day 2 until Day 3 updates")
 
-    pending_state["waiting_day2"] = day2_key
+    state["waiting_day2"] = day2_key
+
+    save_state(state)
 
 elif day3_new and not day2_new:
 
     print("Holding Day 3 until Day 2 updates")
 
-    pending_state["waiting_day3"] = day3_key
+    state["waiting_day3"] = day3_key
+
+    save_state(state)
 
 elif (
     state.get("waiting_day2") == day2_key
@@ -744,24 +748,19 @@ if day23_ready:
         # --------------------
 
         if not discord_content:
-
-            highest_risk = max(
-                [r2, r3],
-                key=lambda r: RISK_RANK[r]
-            )
-
-            previous_highest = max(
-                [
-                    prev_r2 or "NONE",
-                    prev_r3 or "NONE"
-                ],
-                key=lambda r: RISK_RANK[r]
-            )
-
-            upgrade = (
-                RISK_RANK[highest_risk]
-                > RISK_RANK[previous_highest]
-            )
+            upgrade = False
+            
+            if (
+                prev_r2
+                and RISK_RANK[r2] > RISK_RANK[prev_r2]
+            ):
+                upgrade = True
+            
+            if (
+                prev_r3
+                and RISK_RANK[r3] > RISK_RANK[prev_r3]
+            ):
+                upgrade = True
 
             if highest_risk == "HIGH":
 
