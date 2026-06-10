@@ -85,6 +85,7 @@ for alert in data.get("features", []):
     color = 3447003
     emoji = "⚠️"
     ping_everyone = False
+    ping_role = False
     pds_header = ""
     pds_footer = ""
 
@@ -131,7 +132,7 @@ for alert in data.get("features", []):
         ping_everyone = True
     
     # --- Snow-related (general) ---
-    elif "snow" in event_lower:
+    elif "snow" in event_lower and "blizzard" not in event_lower:
         color = 0xFFFFFF  # white
         emoji = "❄️"
     
