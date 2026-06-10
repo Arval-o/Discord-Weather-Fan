@@ -330,7 +330,6 @@ def get_risk(day, point):
             if geom.intersects(sample_box):
                 dn = f["properties"].get("dn")
                 risk_key = DN_TO_RISK.get(dn, "NONE")
-                print(prob_key, f["properties"])
                 if risk_key != "NONE":
                     found.append(risk_key)
         except Exception:
@@ -526,7 +525,6 @@ if day1_new:
     img = upload_image("day1otlk.png")
     if img:
         risk, sub, nearest, found = get_risk(1, POINT)
-        print("Day 1 sub risks:", sub)
         prev_risk = state.get("last_day1_risk")
         trend = ""
         emoji = RISK_EMOJIS.get(risk, "")
@@ -860,15 +858,7 @@ if embeds:
             save_state(state)
 
             print("Posted to Discord")
-            print("DAY1 SUB:", sub)
-
-            print("DAY2 TITLE:", day2.title)
-            print("DAY2 LINK :", day2.link)
             
-            print("DAY3 TITLE:", day3.title)
-            print("DAY3 LINK :", day3.link)
-
-            print(feed.entries[0])
 
         else:
 
@@ -885,12 +875,4 @@ if embeds:
 else:
 
     print("Nothing to post")
-    print("DAY1 SUB:", sub)
-
-    print("DAY2 TITLE:", day2.title)
-    print("DAY2 LINK :", day2.link)
     
-    print("DAY3 TITLE:", day3.title)
-    print("DAY3 LINK :", day3.link)
-
-    print(feed.entries[0])
