@@ -1,1 +1,21 @@
+{
+    "posted_day1": None,
+    "posted_day2": None,
+    "posted_day3": None,
 
+    "waiting_day2": None,
+    "waiting_day3": None,
+
+    "last_day1_risk": None,
+    "last_day2_risk": None,
+    "last_day3_risk": None,
+
+    "last_message_hash": "",
+    "last_post_time": 0,
+
+    "ping_date": "",
+    "pinged_slgt": False,
+    "pinged_enh": False,
+    "pinged_mdt": False,
+    "pinged_high": False,
+}
