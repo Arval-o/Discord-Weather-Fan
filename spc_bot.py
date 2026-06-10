@@ -458,19 +458,6 @@ def build_message_hash(parts):
 
 # helper functs
 
-def build_risk_text(risk, previous_risk):
-    emoji = RISK_EMOJIS[risk]
-
-    change = risk_change(previous_risk, risk)
-
-    if change == "upgrade":
-        return f"{emoji} {risk}\n⬆ Upgrade from {previous_risk}"
-
-    if change == "downgrade":
-        return f"{emoji} {risk}\n⬇ Lower than previous outlook ({previous_risk})"
-
-    return f"{emoji} {risk}"
-
 
 def should_ping_day1(state, risk, previous_risk):
     """
@@ -544,18 +531,13 @@ if day1_new:
         if prev_risk and prev_risk != risk:
             if RISK_RANK[risk] > RISK_RANK[prev_risk]:
                 trend = (
-                    f"{emoji} Risk: {risk} "
-                    f"**(⚠️ UP FROM {prev_risk})**"
-                )
-            elif RISK_RANK[risk] < RISK_RANK[prev_risk]:
-                trend = (
-                    f"{emoji} Risk: {risk} "
-                    f"(down from {prev_risk})"
+                    f"**{emoji} Risk: {risk}** "
+                    f" **(⚠️ UP FROM {prev_risk})**\n\n"
                 )
             else:
-                trend = f"{emoji} Risk: {risk}"
+                trend = f"**{emoji} Risk: {risk}**\n\n"
         else:
-            trend = f"{emoji} Risk: {risk}"
+            trend = f"**{emoji} Risk: {risk}**\n\n"
 
         # ping logic
         ping = None
@@ -606,7 +588,7 @@ if day1_new:
 
         if nearest:
             nearest_emoji = RISK_EMOJIS.get(nearest[0], "")
-            lines.append(f"Nearest higher risk: {nearest_emoji} {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
+            lines.append(f"\n\n Nearest higher risk: {nearest_emoji} {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
         else:
             lines.append("No higher risk levels in CONUS.")
 
