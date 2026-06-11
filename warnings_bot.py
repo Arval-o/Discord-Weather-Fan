@@ -2,10 +2,11 @@ import requests
 import os
 import json
 import time
+from datetime import datetime
 
 # === CONFIG ===
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
-STATE_FILE = "last_warnings.txt"
+STATE_FILE = "alert_state.json"
 URL = "https://api.weather.gov/alerts/active?area=PA"
 
 TARGET_COUNTY = "Allegheny"
@@ -15,9 +16,9 @@ MIN_LATITUDE = 40.55  # Optional: north of this latitude only
 # === Load posted alerts ===
 try:
     with open(STATE_FILE, "r") as f:
-        posted_ids = set(f.read().splitlines())
+        state = json.load(f)
 except FileNotFoundError:
-    posted_ids = set()
+    state = {}
 
 headers = {
     "User-Agent": "weather-bot (your-email@example.com)"
@@ -29,11 +30,44 @@ if r.status_code != 200:
     exit()
 
 data = r.json()
-new_ids = set(posted_ids)
+
+
+def get_vtec(props):
+    vtec_list = props.get("parameters", {}).get("VTEC", [])
+    return vtec_list[0] if vtec_list else None
+
+def get_alert_key(vtec):
+    try:
+        parts = vtec.split(".")
+        if len(parts) >= 6:
+            return ".".join(parts[2:6])
+        return vtec
+    except Exception:
+        return vtec
+
+def get_vtec_action(vtec):
+    try:
+        return vtec.split(".")[1]
+    except Exception:
+        return "NEW"
+
+def discord_time(timestr):
+    if not timestr:
+        return "Unknown"
+
+    dt = datetime.fromisoformat(
+        timestr.replace("Z", "+00:00")
+    )
+    return f"<t:{int(dt.timestamp())}:F>"
 
 for alert in data.get("features", []):
     props = alert["properties"]
-    alert_id = props.get("id")
+    vtec = get_vtec(props)
+    if not vtec:
+        continue
+    expires = props.get("expires")
+    message_type = props.get("messageType", "Alert")
+    action = get_vtec_action(vtec)
     event = props.get("event", "")
     area = props.get("areaDesc", "")
 
@@ -59,9 +93,6 @@ for alert in data.get("features", []):
     if not north_filter_pass:
         continue
 
-    if alert_id in posted_ids:
-        continue
-
     def is_pds(props):
         text = " ".join([
             props.get("headline") or "",
@@ -79,7 +110,18 @@ for alert in data.get("features", []):
 
     event_lower = event.lower()
 
+    alert_key = get_alert_key(vtec)
+    existing = state.get(alert_key)
+
     pds = is_pds(props)
+
+    if action == "CON" and existing:
+        continue
+
+    if action == "CAN":
+        if alert_key in state:
+            del state[alert_key]
+        continue
 
     # default fallback
     color = 3447003
@@ -166,28 +208,70 @@ for alert in data.get("features", []):
     # --- Radar URL (auto-refresh) ---
     radar_url = f"https://radar.weather.gov/ridge/standard/KPBZ_loop.gif?t={int(time.time())}"
 
+    if existing:
+        old_expire = existing.get("expires")
+        if expires != old_expire:
+            update_embed = {
+                "title": f"{event} Extended",
+                "description":
+                    f"Previous expiration: {discord_time(old_expire)}\n"
+                    f"New expiration: {discord_time(expires)}",
+                "color": color
+            }
+            payload = {
+                "content": "",
+                "embeds": [update_embed]
+            }
+            resp = requests.post(WEBHOOK_URL, json=payload)
+
+            if resp.status_code == 204:
+                state[alert_key]["expires"] = expires
+                print(f"Updated: {event}")
+            else:
+                print("Update failed:", resp.text)
+        continue
+
     # --- Build embed ---
-    embed = {
-        "title": headline,
-        "description": description,
-        "color": color,
-        "fields": [
-            {"name": "Severity", "value": severity, "inline": True},
-            {"name": "Instructions", "value": instruction, "inline": False},
-            {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/station/kpbz/standard)", "inline": False}
-        ],
-        "image": {"url": radar_url}
-    }
+    if pds:
+        embed = {
+            "title": headline,
+            "description": f"{pds_header}{description}{pds_footer}",
+            "color": color,
+            "fields": [
+                {"name": "Severity", "value": severity, "inline": True},
+                {"name": "Instructions", "value": instruction, "inline": False},
+                {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/station/kpbz/standard)", "inline": False}
+            ],
+            "image": {"url": radar_url}
+        }
+    else:
+        embed = {
+            "title": headline,
+            "description": description,
+            "color": color,
+            "fields": [
+                {"name": "Severity", "value": severity, "inline": True},
+                {"name": "Instructions", "value": instruction, "inline": False},
+                {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/station/kpbz/standard)", "inline": False}
+            ],
+            "image": {"url": radar_url}
+        }
+    
 
     payload = {"content": content, "embeds": [embed]}
     response = requests.post(WEBHOOK_URL, json=payload)
 
     if response.status_code == 204:
         print(f"Posted: {event}")
-        new_ids.add(alert_id)
+    
+        state[alert_key] = {
+            "event": event,
+            "expires": expires
+        }
+    
     else:
         print("Discord error:", response.text)
 
 # === Save posted IDs ===
 with open(STATE_FILE, "w") as f:
-    f.write("\n".join(new_ids))
+    json.dump(state, f, indent=2)
