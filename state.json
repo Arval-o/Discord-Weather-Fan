@@ -1,18 +1,18 @@
 {
   "posted_day1": "41ad41ac055d5c84ce55cd1ae8f84f871864badf07310b5f2d145154d01fc6d0",
-  "posted_day2": "65e774f06464479578f1b3ae07406fba47094552651a13e0656e6900d1657509",
-  "posted_day3": "e8f6cf16601845ff0bbad1e43a0a607fdf2339a1617d10022d16cb9ba3835bf9",
-  "waiting_day2": "1256d95d8594415b85353b4246c05292ae6327d0312015c39ee1d2979c036d50",
+  "posted_day2": "1256d95d8594415b85353b4246c05292ae6327d0312015c39ee1d2979c036d50",
+  "posted_day3": "cbb518b679dd015f5efaf099b519c3b76eb1c2677adfb78419367d6f427da755",
+  "waiting_day2": null,
   "waiting_day3": null,
   "last_day1_risk": "MRGL",
   "last_day2_risk": "MRGL",
-  "last_day3_risk": "MRGL",
-  "last_message_hash": "53649b242064e541b1e5de03a14f5e763b60ca20026cbea1b1fc3cf93aca9441",
-  "last_post_time": 1781159168,
+  "last_day3_risk": "NONE",
+  "last_message_hash": "d78ac9c0a7115d8a5e957403a6a3283ca69ba2a0fe133d383a0655f97c6bb28d",
+  "last_post_time": 1781163052,
   "ping_date": "2026-06-11",
   "pinged_slgt": false,
   "pinged_enh": false,
   "pinged_mdt": false,
   "pinged_high": false,
-  "message_id": "1514516068184621087"
+  "message_id": "1514532360383893514"
 }
