@@ -1,18 +1,18 @@
 {
-  "posted_day1": "d93bb0768ff70a996fbb7365e97a9eed84a7ec7e24a4c34e0fac1889c6be4075",
-  "posted_day2": "433c28c6d289fdeae84c558c8b2c5039418c5defe873bd2912f2d7accfd02a82",
-  "posted_day3": "04a983eb79af2e3b89ef8dfd3169dfb8f881f92d3cf6eaa4aacf5c0897a32e8f",
-  "waiting_day2": "3855b09241d22eb191970ad72c5b58b9e065137344bd893366393ecd28aa35da",
+  "posted_day1": "bd52f5289525b7bf346563b3279eb8a99f027ad4d38c2d38e26df79ad5d60655",
+  "posted_day2": "3855b09241d22eb191970ad72c5b58b9e065137344bd893366393ecd28aa35da",
+  "posted_day3": "e6e7ce1f1e251eaa248cdfd17e2efcff8c73f5eeda61b8a5d7dacd9c76014634",
+  "waiting_day2": null,
   "waiting_day3": null,
-  "last_day1_risk": "NONE",
+  "last_day1_risk": "SLGT",
   "last_day2_risk": "NONE",
-  "last_day3_risk": "NONE",
-  "last_message_hash": "71f02d5cb1d592222e1630eb86159913ba37350030ffc922e57a5ca07feec01b",
-  "last_post_time": 1781455060,
+  "last_day3_risk": "TSTM",
+  "last_message_hash": "eed1ad906b1adbf623cecd77f71c9d19666135b277e0c7a483fe866ba25c373b",
+  "last_post_time": 1781466901,
   "ping_date": "2026-06-14",
   "pinged_slgt": true,
   "pinged_enh": false,
   "pinged_mdt": false,
   "pinged_high": false,
-  "message_id": "1515757129871396967"
+  "message_id": "1515806793178157206"
 }
