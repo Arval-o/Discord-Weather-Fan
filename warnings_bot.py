@@ -4,7 +4,7 @@ import json
 import time
 from datetime import datetime
 
-# === CONFIG ===
+# config
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 STATE_FILE = "alert_state.json"
 URL = "https://api.weather.gov/alerts/active?area=PA"
@@ -13,7 +13,7 @@ TARGET_COUNTY = "Allegheny"
 ROLE_ID = "1485401778962043021"  # Discord role for Severe Thunderstorm
 MIN_LATITUDE = 40.55  # Optional: north of this latitude only
 
-# === Load posted alerts ===
+# load alerts
 try:
     with open(STATE_FILE, "r") as f:
         state = json.load(f)
@@ -71,11 +71,11 @@ for alert in data.get("features", []):
     event = props.get("event", "")
     area = props.get("areaDesc", "")
 
-    # --- County filter ---
+    # county filter
     if TARGET_COUNTY not in area:
         continue
 
-    # --- Optional: northern latitude filter ---
+    # latitude filter
     geometry = alert.get("geometry")
     north_filter_pass = True
     if geometry and geometry.get("coordinates"):
@@ -87,7 +87,7 @@ for alert in data.get("features", []):
         else:
             coords_list = [geometry["coordinates"]]
 
-        # Pass if any coordinate is north of MIN_LATITUDE
+        
         north_filter_pass = any(pt[1] >= MIN_LATITUDE for pt in coords_list)
 
     if not north_filter_pass:
@@ -102,7 +102,7 @@ for alert in data.get("features", []):
     
         return "particularly dangerous situation" in text
 
-    # --- Clean text safely ---
+    # clean text BECAUSE NEWLINES ARE ACTUALLY PART OF THE FORMATTING. WHY!?
     headline = props.get("headline") or event
     description = " ".join((props.get("description") or "No description available.").split())[:2500]
     instruction = " ".join((props.get("instruction") or "No instructions provided.").split())[:1200]
@@ -162,39 +162,39 @@ for alert in data.get("features", []):
         emoji = "⛈️"
         ping_role = True
     
-    # --- Severe Thunderstorm Watch (soft green-yellow) ---
+    
     elif "severe thunderstorm watch" in event_lower:
         color = 0xB8860B if pds else 0xC9D96C  
         emoji = "⛅"
     
-    # --- Blizzard Warning ---
+  
     elif "blizzard warning" in event_lower:
         color = 0x000000 if pds else 0xFF8C00  
         emoji = "❄️"
         ping_everyone = True
     
-    # --- Snow-related (general) ---
+    
     elif "snow" in event_lower and "blizzard" not in event_lower:
         color = 0xFFFFFF  # white
         emoji = "❄️"
     
-    # --- Flood Warning ---
+   
     elif "flood warning" in event_lower:
         color = 0xFFFF00 if pds else 0x006400  
         emoji = "🌊"
     
-    # --- Flash Flood Warning ---
+  
     elif "flash flood warning" in event_lower:
         color = 0xFFFF00 if pds else 65280  
         emoji = "🌊"
         ping_role = True
     
-    # --- Advisory ---
+
     elif "advisory" in event_lower:
         color = 0x3498DB  # blue
         emoji = "ℹ️"
 
-    # --- Ping logic ---
+
     if ping_everyone:
         content = f"@everyone {emoji} **{event}**"
     elif ping_role:
@@ -205,7 +205,7 @@ for alert in data.get("features", []):
     else:
         content = f"{emoji} **{event}**"
 
-    # --- Radar URL (auto-refresh) ---
+
     radar_url = f"https://radar.weather.gov/ridge/standard/KPBZ_loop.gif?t={int(time.time())}"
 
     if existing:
@@ -231,7 +231,6 @@ for alert in data.get("features", []):
                 print("Update failed:", resp.text)
         continue
 
-    # --- Build embed ---
     if pds:
         embed = {
             "title": headline,
@@ -272,6 +271,6 @@ for alert in data.get("features", []):
     else:
         print("Discord error:", response.text)
 
-# === Save posted IDs ===
+# save posted IDs
 with open(STATE_FILE, "w") as f:
     json.dump(state, f, indent=2)
