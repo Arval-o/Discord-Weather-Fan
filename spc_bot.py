@@ -11,7 +11,7 @@ import requests
 from shapely.geometry import MultiPolygon, Point, box, shape
 from shapely.ops import nearest_points, unary_union
 
-# === CONFIG ===
+#config
 
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 GH_TOKEN = os.environ["GH_TOKEN"]
@@ -30,16 +30,16 @@ MY_ID = "1109224984984956968"
 # Anti-spam protection
 POST_COOLDOWN_SECONDS = 60 * 60 * 3  # 3 hours
 
-# Home location
+
 HOME_LON = -80.096278
 HOME_LAT = 40.615111
 
 POINT = Point(HOME_LON, HOME_LAT)
 
-# ~0.5 mile sampling radius
+
 SAMPLE_RADIUS = 0.008
 
-# Risk ranking
+
 RISK_ORDER = [
     "NONE",
     "TSTM",
@@ -79,7 +79,7 @@ LAYER_IDS = {
     }
 }
 
-# SPC categorical DN values
+
 DN_TO_RISK = {
     2: "TSTM",
     3: "MRGL",
@@ -89,7 +89,7 @@ DN_TO_RISK = {
     8: "HIGH"
 }
 
-# Discord colors
+
 RISK_COLORS = {
     "NONE": 0x808080,
     "TSTM": 0x90EE90,
@@ -100,7 +100,7 @@ RISK_COLORS = {
     "HIGH": 0x8B0000,
 }
 
-# Display emojis
+
 RISK_EMOJIS = {
     "NONE": "⬜",
     "TSTM": "🟦",
@@ -135,7 +135,7 @@ DEFAULT_STATE = {
     "message_id": None,
 }
 
-# === STATE MANAGEMENT ===
+# state management
 
 def load_state():
     try:
@@ -160,7 +160,7 @@ def save_state(state):
 
 state = load_state()
 
-# === DAILY PING RESET ===
+# daily ping reset (it's probably broken ngl)
 
 today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -176,14 +176,14 @@ if state["ping_date"] != today:
 
     save_state(state)
 
-# === FETCH RSS ===
+# fetch rss
 
 feed = feedparser.parse(RSS_URL)
 
 # Newest first
 entries = list(reversed(feed.entries))
 
-# === OUTLOOK COLLECTION ===
+# outlook collection, also lwk broken :(
 
 day1 = None
 day2 = None
@@ -201,16 +201,15 @@ for entry in entries:
     elif "day 3" in title and day3 is None:
         day3 = entry
 
-# === OUTLOOK KEYS ===
+# outlook keys
 
 def outlook_key(entry):
     """
-    Stable identifier for outlook tracking.
+    Identifier for tracking the outlooks
 
-    We intentionally avoid RSS GUIDs because SPC can
-    occasionally republish entries.
+    (avoid RSS GUIDs because APPARENTLY the SPC just REPUBLISHES ENTRIES SOMETIMES. WHY!?)
 
-    Title + link is stable enough for our purposes.
+    Title + link is stable enough I hope.
     """
 
     if not entry:
@@ -225,7 +224,7 @@ day1_key = outlook_key(day1)
 day2_key = outlook_key(day2)
 day3_key = outlook_key(day3)
 
-# === NEW OUTLOOK DETECTION ===
+# new outlook detection
 
 day1_new = (
     day1_key is not None
@@ -250,7 +249,7 @@ print(f"Day 3 new: {day3_new}")
 print("=== State ===")
 print(json.dumps(state, indent=2))
 
-# === IMAGE UPLOAD ===
+# upload the thing
 def upload_image(filename):
     img_response = requests.get(f"https://www.spc.noaa.gov/products/outlook/{filename}")
     if img_response.status_code != 200:
@@ -279,12 +278,12 @@ def upload_image(filename):
         print(f"GitHub upload failed for {filename}: {put_response.text}")
         return None
 
-    # GitHub Pages serves the docs/ folder as the site root, so the URL
-    # does NOT include the PAGE_FOLDER segment — just /filename directly.
+    # (Note 2 self: GitHub Pages serves the docs/ folder as the site root, so the URL
+    # does NOT include the PAGE_FOLDER segment u stupid person.)
     user, repo_name = REPO.split("/")
     return f"https://{user}.github.io/{repo_name}/{filename}?t={int(time.time())}"
 
-# === MAPSERVER QUERY ===
+#mapserver query stuff
 def query_layer(layer_id):
     """
     Query a NOAA MapServer layer and return its GeoJSON features.
@@ -305,14 +304,13 @@ def query_layer(layer_id):
 
 def geom_boundary(geom):
     """
-    Return the exterior boundary of a geometry, handling both Polygon
-    and MultiPolygon so that distance/nearest_points never fails.
+    Returns exterior boundary of geometry
     """
     if isinstance(geom, MultiPolygon):
         return unary_union([p.exterior for p in geom.geoms])
     return geom.exterior
 
-# === RISK FUNCTION ===
+# risk function
 def get_risk(day, point):
     """
     day  : int  (1, 2, or 3)
@@ -337,14 +335,14 @@ def get_risk(day, point):
         except Exception:
             continue
 
-    # Highest risk at point
+  
     risk = "NONE"
     for r in reversed(RISK_ORDER):
         if r in found:
             risk = r
             break
 
-    # --- Probabilistic sub-risks (Day 1 only) ---
+    
     sub = {"tornado": 0, "wind": 0, "hail": 0, "sig": None}
     if day == 1:
         for prob_key, layer_map in [("tornado", LAYER_IDS["torn"]),
@@ -362,15 +360,8 @@ def get_risk(day, point):
                 except Exception:
                     continue
 
-    # --- Nearest higher risk polygon ---
-    # SPC polygons are cake-layered (SLGT contains MRGL contains TSTM).
-    # We want the *next* risk level above the user's current risk, not
-    # just the closest polygon boundary regardless of level.
-    # Strategy: find the closest polygon for each level above current risk,
-    # then pick the lowest such level (i.e. the next step up).
-    current_rank = RISK_RANK[risk]
-    
-    # Build a dict: risk_level -> list of (dist_miles, nearest_pt)
+    # Nearest higher risk stuff (I think I fixed this part (???))
+    # Build a dict
     higher_by_level = {}
     for f in cat_features:
         try:
@@ -394,11 +385,11 @@ def get_risk(day, point):
             if r in higher_by_level:
                 dist_miles, nearest_pt = higher_by_level[r]
     
-                # === FIXED BEARING CALCULATION ===
+                # calculates bearings
                 dx = nearest_pt.x - point.x   # longitude (E/W)
                 dy = nearest_pt.y - point.y   # latitude (N/S)
     
-                # Convert math angle → compass bearing
+                # math angle -> actual compass bearing (why is it like this)
                 angle = (450 - degrees(atan2(dy, dx))) % 360
     
                 dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
@@ -409,15 +400,8 @@ def get_risk(day, point):
 
     return risk, sub, nearest, found
 def risk_change(old_risk, new_risk):
-    """
-    Compare risks within the SAME forecast day.
-
-    Returns:
-        "upgrade"
-        "downgrade"
-        "same"
-        None
-    """
+    
+    
 
     if not old_risk:
         return None
@@ -433,7 +417,7 @@ def risk_change(old_risk, new_risk):
 
     return "same"
 
-# === DISCORD MESSAGE BUILDING ===
+# message building
 
 embeds = []
 
@@ -448,7 +432,7 @@ message_parts = []
 
 def build_message_hash(parts):
     """
-    Create a stable hash representing the
+    Create a hash representing the
     exact outlooks being posted.
     """
 
@@ -462,11 +446,7 @@ def build_message_hash(parts):
 
 
 def should_ping_day1(state, risk, previous_risk):
-    """
-    Day 1:
-    SLGT / ENH / MDT / HIGH once per day.
-    After first ping, only upgrades.
-    """
+    
 
     change = risk_change(previous_risk, risk)
 
@@ -494,10 +474,7 @@ def should_ping_day1(state, risk, previous_risk):
 
 
 def should_ping_day23(state, risk, previous_risk):
-    """
-    Day 2/3:
-    ENH / MDT / HIGH only.
-    """
+    
 
     change = risk_change(previous_risk, risk)
 
@@ -520,7 +497,7 @@ def should_ping_day23(state, risk, previous_risk):
 
     return None
 
-# --- DAY 1 ---
+# day 1
 if day1_new:
     entry = day1
     print(f"Prepared Day 1")
@@ -602,7 +579,7 @@ if day1_new:
             "image": {"url": img}
         })
 
-        # Stage state updates — not applied until Discord confirms
+        # Stage state updates (not applied until Discord confirms)
         pending_state["posted_day1"] = day1_key
         pending_state["last_day1_risk"] = risk
 
@@ -610,8 +587,7 @@ if day1_new:
             f"day1:{day1_key}"
         )
          
-# --- DAY 2/3 ---
-# --- DAY 2 / DAY 3 PAIRING LOGIC ---
+# This tries to pair day 2 and 3 and I think it works???
 
 day23_ready = False
 
@@ -650,8 +626,7 @@ elif (
     day23_ready = True
 
 
-# --- DAY 2 / DAY 3 POSTING ---
-
+# Posting day 2 and 3
 if day23_ready:
 
     print("Prepared Day 2/3")
@@ -665,9 +640,7 @@ if day23_ready:
         r2, sub2, nearest2, found2 = get_risk(2, POINT)
         r3, sub3, nearest3, found3 = get_risk(3, POINT)
 
-        # --------------------
-        # Day 2 trend
-        # --------------------
+       
 
         prev_r2 = state.get("last_day2_risk")
 
@@ -696,9 +669,7 @@ if day23_ready:
 
             trend2 = f"{emoji2} Risk: {r2}"
 
-        # --------------------
-        # Day 3 trend
-        # --------------------
+       
 
         prev_r3 = state.get("last_day3_risk")
 
@@ -727,10 +698,7 @@ if day23_ready:
 
             trend3 = f"{emoji3} Risk: {r3}"
 
-        # --------------------
-        # Ping logic
-        # --------------------
-
+        
         highest_risk = max(
             [r2, r3],
             key=lambda r: RISK_RANK[r]
