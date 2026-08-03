@@ -237,11 +237,11 @@ for alert in data.get("features", []):
             }
         resp = requests.post(WEBHOOK_URL, json=payload)
 
-            if resp.status_code in (200, 204):
-                state[alert_key]["expires"] = expires
-                print(f"Cancelled: {event}")
-            else:
-                print("Cancel failed:", resp.text)
+        if resp.status_code in (200, 204):
+            state[alert_key]["expires"] = expires
+            print(f"Cancelled: {event}")
+        else:
+            print("Cancel failed:", resp.text)
         if alert_key in state:
             del state[alert_key]
         continue
