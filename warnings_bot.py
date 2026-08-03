@@ -40,7 +40,7 @@ def get_alert_key(vtec):
     try:
         parts = vtec.split(".")
         if len(parts) >= 6:
-            return ".".join(parts[2:6])
+            return ".".join(parts[3:6])
         return vtec
     except Exception:
         return vtec
@@ -65,7 +65,7 @@ for alert in data.get("features", []):
     vtec = get_vtec(props)
     if not vtec:
         continue
-    expires = props.get("expires")
+    expires = props.get("ends") or props.get("expires")
     message_type = props.get("messageType", "Alert")
     action = get_vtec_action(vtec)
     event = props.get("event", "")
@@ -115,13 +115,6 @@ for alert in data.get("features", []):
 
     pds = is_pds(props)
 
-    if action == "CON" and existing:
-        continue
-
-    if action == "CAN":
-        if alert_key in state:
-            del state[alert_key]
-        continue
 
     # default fallback
     color = 3447003
@@ -208,7 +201,7 @@ for alert in data.get("features", []):
 
     radar_url = f"https://radar.weather.gov/ridge/standard/KPBZ_loop.gif?t={int(time.time())}"
 
-    if existing:
+    if existing and action != "CAN":
         old_expire = existing.get("expires")
         if expires != old_expire:
             update_embed = {
@@ -224,11 +217,33 @@ for alert in data.get("features", []):
             }
             resp = requests.post(WEBHOOK_URL, json=payload)
 
-            if resp.status_code == 204:
+            if resp.status_code in (200, 204):
                 state[alert_key]["expires"] = expires
                 print(f"Updated: {event}")
             else:
                 print("Update failed:", resp.text)
+        continue
+
+    if existing and action == "CAN":
+        cancel_embed = {
+                "title": f"{event} has been canceled.",
+                "description":
+                    f"There is no more threat to the area.",
+                "color": 808080
+            }
+        payload = {
+                "content": "",
+                "embeds": [cancel_embed]
+            }
+        resp = requests.post(WEBHOOK_URL, json=payload)
+
+            if resp.status_code in (200, 204):
+                state[alert_key]["expires"] = expires
+                print(f"Cancelled: {event}")
+            else:
+                print("Cancel failed:", resp.text)
+        if alert_key in state:
+            del state[alert_key]
         continue
 
     if pds:
@@ -260,7 +275,7 @@ for alert in data.get("features", []):
     payload = {"content": content, "embeds": [embed]}
     response = requests.post(WEBHOOK_URL, json=payload)
 
-    if response.status_code == 204:
+    if response.status_code in (200, 204):
         print(f"Posted: {event}")
     
         state[alert_key] = {
