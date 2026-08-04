@@ -5,7 +5,6 @@ import os
 import time
 from datetime import datetime
 import zoneinfo
-
 import feedparser
 import requests
 from shapely.geometry import MultiPolygon, Point, box, shape
@@ -257,16 +256,16 @@ def main():
         r1, sub1, _, _ = get_risk(1, POINT)
         if risk_change(state["day1_risk"], r1) == "upgrade":
             img1 = upload_image("day1otlk.png")
-        if img1:
+            if img1:
                 desc = f"**{RISK_EMOJIS.get(r1, '')} Risk: {r1}** **(⚠️ UP FROM {state['day1_risk']})**\n"
                 ping_content = update_ping(ping_content, r1)
                 if RISK_RANK[r1] >= RISK_RANK["SLGT"]:
-            if sub1["tornado"]: desc += f"🌪️ Tornado: {sub1['tornado']}%\n"
-            if sub1["wind"]: desc += f"💨 Wind: {sub1['wind']}%\n"
-            if sub1["hail"]: desc += f"🧊 Hail: {sub1['hail']}%\n"
-            embeds.append({"title": day1.title, "url": day1.link, "description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image": {"url": img1}})
+                    if sub1["tornado"]: desc += f"🌪️ Tornado: {sub1['tornado']}%\n"
+                    if sub1["wind"]: desc += f"💨 Wind: {sub1['wind']}%\n"
+                    if sub1["hail"]: desc += f"🧊 Hail: {sub1['hail']}%\n"
+                    embeds.append({"title": day1.title, "url": day1.link, "description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image": {"url": img1}})
                 else:
-            embeds.append({"title": day1.title, "url": day1.link, "description": desc, "color": RISK_COLORS.get(r1, 0x808080), "thumbnail": {"url": img1}})
+                    embeds.append({"title": day1.title, "url": day1.link, "description": desc, "color": RISK_COLORS.get(r1, 0x808080), "thumbnail": {"url": img1}})
         state["day1_risk"] = r1
         state["day1_key"] = day1_k
 
