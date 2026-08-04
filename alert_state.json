@@ -2,5 +2,9 @@
   "TO.W.0100": {
     "event": "Tornado Warning",
     "expires": "2026-08-04T20:00:00Z"
+  },
+  "WW.Y.0101": {
+    "event": "Winter Weather Advisory",
+    "expires": "2026-08-04T20:00:00Z"
   }
 }
