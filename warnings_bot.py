@@ -33,15 +33,15 @@ data = r.json()
 
 fake_alert = {
     "properties": {
-        "event": "Winter Weather Advisory",
-        "headline": "TEST Winter Weather Advisory issued for Allegheny, PA",
-        "description": "Freezing rain and sleet expected overnight. (TEST)",
-        "instruction": "Slow down and use caution while traveling. (TEST)",
-        "severity": "Minor",
+        "event": "Tung Tung Tung Sahur Advisory",
+        "headline": "A Tung Tung Tung Sahur Advisory is in effect until August 4 at 11:30pm EDT.",
+        "description": "**THIS IS A PARTICULARLY DANGEROUS SITUATION** Tung Tung Tung Sahur was sighted near Lucas Liu's house. He is likely no longer with us, but you must take steps to ensure your survival. There is an EXTREME threat to life and property!",
+        "instruction": "Lock all doors and windows, and stay out of sight. If you are seen, you are dead. Do not attempt to rescue loved ones who have been caught - it is too late for them..",
+        "severity": "Extreme",
         "areaDesc": "Allegheny",
-        "ends": "2026-08-04T20:20:00Z",
+        "ends": "2026-08-04T21:30:00Z",
         "parameters": {
-            "VTEC": ["/O.CAN.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
+            "VTEC": ["/O.NEW.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
         }
     },
     "geometry": {
