@@ -272,6 +272,7 @@ for alert in data.get("features", []):
             "color": color,
             "fields": [
                 {"name": "Severity", "value": severity, "inline": True},
+                {"name": "Expires", "value": discord_time(expires), "inline": True},
                 {"name": "Instructions", "value": instruction, "inline": False},
                 {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/station/kpbz/standard)", "inline": False}
             ],
@@ -284,7 +285,7 @@ for alert in data.get("features", []):
             "color": color,
             "fields": [
                 {"name": "Severity", "value": severity, "inline": True},
-                {"name": "Expires", "value": {discord_time(expires)}, "inline": True},
+                {"name": "Expires", "value": discord_time(expires), "inline": True},
                 {"name": "Instructions", "value": instruction, "inline": False},
                 {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/station/kpbz/standard)", "inline": False}
             ],
