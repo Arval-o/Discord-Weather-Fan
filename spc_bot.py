@@ -3,15 +3,13 @@ import hashlib
 import json
 import os
 import time
-from datetime import datetime, timezone
-from math import atan2, degrees
+from datetime import datetime
+import zoneinfo
 
 import feedparser
 import requests
 from shapely.geometry import MultiPolygon, Point, box, shape
 from shapely.ops import nearest_points, unary_union
-
-#config
 
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 GH_TOKEN = os.environ["GH_TOKEN"]
@@ -21,308 +19,113 @@ BRANCH = "main"
 PAGE_FOLDER = "docs"
 
 STATE_FILE = "state.json"
-
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 
 ROLE_ID = "1485401778962043021"
 MY_ID = "1109224984984956968"
 
-# Anti-spam protection
-POST_COOLDOWN_SECONDS = 60 * 60 * 3  # 3 hours
-
-
 HOME_LON = -80.096278
 HOME_LAT = 40.615111
-
 POINT = Point(HOME_LON, HOME_LAT)
-
-
 SAMPLE_RADIUS = 0.008
 
+RISK_ORDER = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
+RISK_RANK = {risk: idx for idx, risk in enumerate(RISK_ORDER)}
 
-RISK_ORDER = [
-    "NONE",
-    "TSTM",
-    "MRGL",
-    "SLGT",
-    "ENH",
-    "MDT",
-    "HIGH"
-]
-
-RISK_RANK = {
-    risk: idx
-    for idx, risk in enumerate(RISK_ORDER)
-}
-
-# NOAA MapServer base URL
-MAPSERVER = (
-    "https://mapservices.weather.noaa.gov/"
-    "vector/rest/services/outlooks/SPC_wx_outlks/MapServer"
-)
-
-# Layer IDs
+MAPSERVER = "https://mapservices.weather.noaa.
+gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer"
 LAYER_IDS = {
-    "cat": {
-        1: 1,
-        2: 9,
-        3: 17
-    },
-    "torn": {
-        1: 3
-    },
-    "hail": {
-        1: 5
-    },
-    "wind": {
-        1: 7
-    }
+    "cat": {1: 1, 2: 9, 3: 17},
+    "torn": {1: 3},
+    "hail": {1: 5},
+    "wind": {1: 7}
 }
 
-
-DN_TO_RISK = {
-    2: "TSTM",
-    3: "MRGL",
-    4: "SLGT",
-    5: "ENH",
-    6: "MDT",
-    8: "HIGH"
-}
-
+DN_TO_RISK = {2: "TSTM", 3: "MRGL", 4: "SLGT", 5: "ENH", 6: "MDT", 8:
+"HIGH"}
 
 RISK_COLORS = {
-    "NONE": 0x808080,
-    "TSTM": 0x90EE90,
-    "MRGL": 0x006400,
-    "SLGT": 0xFFFF00,
-    "ENH": 0xFFA500,
-    "MDT": 0xFF0000,
-    "HIGH": 0x8B0000,
+    "NONE": 0x808080, "TSTM": 0x90EE90, "MRGL": 0x006400, "SLGT":
+0xFFFF00,
+    "ENH": 0xFFA500, "MDT": 0xFF0000, "HIGH": 0x8B0000,
 }
 
-
 RISK_EMOJIS = {
-    "NONE": "⬜",
-    "TSTM": "🟦",
-    "MRGL": "🟩",
-    "SLGT": "🟨",
-    "ENH": "🟧",
-    "MDT": "🟥",
-    "HIGH": "⚠️",
+    "NONE": "⬜", "TSTM": "🟦", "MRGL": "🟩", "SLGT": "🟨",
+    "ENH": "🟧", "MDT": "🟥", "HIGH": "⚠️",
 }
 
 DEFAULT_STATE = {
-    "posted_day1": None,
-    "posted_day2": None,
-    "posted_day3": None,
-
-    "waiting_day2": None,
-    "waiting_day3": None,
-
-    "last_day1_risk": None,
-    "last_day2_risk": None,
-    "last_day3_risk": None,
-
-    "last_message_hash": "",
-    "last_post_time": 0,
-
-    "ping_date": "",
-    "pinged_slgt": False,
-    "pinged_enh": False,
-    "pinged_mdt": False,
-    "pinged_high": False,
-
-    "message_id": None,
+    "last_run_date": None,
+    "day1_risk": None,
+    "day2_risk": None,
+    "day3_risk": None,
+    "day1_key": None,
+    "day2_key": None,
+    "day3_key": None
 }
-
-# state management
 
 def load_state():
     try:
         with open(STATE_FILE, "r") as f:
             state = json.load(f)
-
-        # Ensure newly-added keys exist
         for key, value in DEFAULT_STATE.items():
             state.setdefault(key, value)
-
         return state
-
-    except Exception as e:
-        print(f"State load failed ({e}), creating fresh state")
+    except Exception:
         return DEFAULT_STATE.copy()
-
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
-
-state = load_state()
-
-# daily ping reset (it's probably broken ngl)
-
-today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-if state["ping_date"] != today:
-    print("Resetting daily ping flags")
-
-    state["ping_date"] = today
-
-    state["pinged_slgt"] = False
-    state["pinged_enh"] = False
-    state["pinged_mdt"] = False
-    state["pinged_high"] = False
-
-    save_state(state)
-
-# fetch rss
-
-feed = feedparser.parse(RSS_URL)
-
-# Newest first
-entries = list(reversed(feed.entries))
-
-# outlook collection, also lwk broken :(
-
-day1 = None
-day2 = None
-day3 = None
-
-for entry in entries:
-    title = entry.title.lower()
-
-    if "day 1" in title and day1 is None:
-        day1 = entry
-
-    elif "day 2" in title and day2 is None:
-        day2 = entry
-
-    elif "day 3" in title and day3 is None:
-        day3 = entry
-
-# outlook keys
-
-def outlook_key(entry):
-    """
-    Identifier for tracking the outlooks
-
-    (avoid RSS GUIDs because APPARENTLY the SPC just REPUBLISHES ENTRIES SOMETIMES. WHY!?)
-
-    Title + link is stable enough I hope.
-    """
-
-    if not entry:
-        return None
-
-    raw = f"{entry.title}|{entry.link}"
-
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
-day1_key = outlook_key(day1)
-day2_key = outlook_key(day2)
-day3_key = outlook_key(day3)
-
-# new outlook detection
-
-day1_new = (
-    day1_key is not None
-    and day1_key != state["posted_day1"]
-)
-
-day2_new = (
-    day2_key is not None
-    and day2_key != state["posted_day2"]
-)
-
-day3_new = (
-    day3_key is not None
-    and day3_key != state["posted_day3"]
-)
-
-print("=== Outlook Status ===")
-print(f"Day 1 new: {day1_new}")
-print(f"Day 2 new: {day2_new}")
-print(f"Day 3 new: {day3_new}")
-
-print("=== State ===")
-print(json.dumps(state, indent=2))
-
-# upload the thing
 def upload_image(filename):
-    img_response = requests.get(f"https://www.spc.noaa.gov/products/outlook/{filename}")
+    img_response = requests.get(f"https://www.spc.noaa.
+gov/products/outlook/{filename}")
     if img_response.status_code != 200:
-        print(f"Image fetch failed for {filename}: HTTP {img_response.status_code}")
         return None
-
     with open(filename, "wb") as img_file:
         img_file.write(img_response.content)
-
-    api = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
+    api = f"https://api.github.
+com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
     headers = {"Authorization": f"token {GH_TOKEN}"}
     check_response = requests.get(api, headers=headers)
-    sha = check_response.json().get("sha") if check_response.status_code == 200 else None
-
+    sha = check_response.json().get("sha") if check_response.status_code
+== 200 else None
     with open(filename, "rb") as img_file:
         content_b64 = base64.b64encode(img_file.read()).decode()
-
-    payload = {"message": f"update {filename}", "content": content_b64, "branch": BRANCH}
+    payload = {"message": f"update {filename}", "content": content_b64,
+"branch": BRANCH}
     if sha:
         payload["sha"] = sha
-
-    put_response = requests.put(api, headers=headers, data=json.dumps(payload))
+    put_response = requests.put(api, headers=headers, data=json.
+dumps(payload))
     os.remove(filename)
-
     if put_response.status_code not in (200, 201):
-        print(f"GitHub upload failed for {filename}: {put_response.text}")
         return None
-
-    # (Note 2 self: GitHub Pages serves the docs/ folder as the site root, so the URL
-    # does NOT include the PAGE_FOLDER segment u stupid person.)
     user, repo_name = REPO.split("/")
-    return f"https://{user}.github.io/{repo_name}/{filename}?t={int(time.time())}"
+    return f"https://{user}.github.io/{repo_name}/{filename}?t={int(time.
+time())}"
 
-#mapserver query stuff
 def query_layer(layer_id):
-    """
-    Query a NOAA MapServer layer and return its GeoJSON features.
-    """
     url = f"{MAPSERVER}/{layer_id}/query"
-    params = {
-        "where": "1=1",
-        "outFields": "*",
-        "f": "geojson",
-    }
+    params = {"where": "1=1", "outFields": "*", "f": "geojson"}
     try:
         r = requests.get(url, params=params, timeout=15)
         r.raise_for_status()
         return r.json().get("features", [])
-    except Exception as e:
-        print(f"MapServer query failed for layer {layer_id}: {e}")
+    except Exception:
         return []
 
 def geom_boundary(geom):
-    """
-    Returns exterior boundary of geometry
-    """
     if isinstance(geom, MultiPolygon):
         return unary_union([p.exterior for p in geom.geoms])
     return geom.exterior
 
-# risk function
 def get_risk(day, point):
-    """
-    day  : int  (1, 2, or 3)
-    point: shapely Point (lon, lat)
-
-    Returns: (risk_str, sub_dict, nearest_tuple_or_None, found_list)
-    """
     sample_box = box(point.x - SAMPLE_RADIUS, point.y - SAMPLE_RADIUS,
                      point.x + SAMPLE_RADIUS, point.y + SAMPLE_RADIUS)
-
     cat_features = query_layer(LAYER_IDS["cat"][day])
-
     found = []
     for f in cat_features:
         try:
@@ -334,15 +137,11 @@ def get_risk(day, point):
                     found.append(risk_key)
         except Exception:
             continue
-
-  
     risk = "NONE"
     for r in reversed(RISK_ORDER):
         if r in found:
             risk = r
             break
-
-    
     sub = {"tornado": 0, "wind": 0, "hail": 0, "sig": None}
     if day == 1:
         for prob_key, layer_map in [("tornado", LAYER_IDS["torn"]),
@@ -354,510 +153,191 @@ def get_risk(day, point):
                     geom = shape(f["geometry"])
                     if geom.intersects(sample_box):
                         dn = f["properties"].get("dn", 0)
-                        sub[prob_key] = max(sub[prob_key], int(dn) if dn else 0)
+                        sub[prob_key] = max(sub[prob_key], int(dn) if dn
+else 0)
                         if int(dn or 0) >= 10:
                             sub["sig"] = True
                 except Exception:
                     continue
+    return risk, sub, None, found
 
-    # Nearest higher risk stuff (I think I fixed this part (???))
-    # Build a dict
-    higher_by_level = {}
-    for f in cat_features:
-        try:
-            geom = shape(f["geometry"])
-            dn = f["properties"].get("dn")
-            cat = DN_TO_RISK.get(dn, "NONE")
-            cat_rank = RISK_RANK[cat]
-            if cat_rank <= current_rank:
-                continue
-            boundary = geom_boundary(geom)
-            dist_miles = boundary.distance(point) * 69
-            _, nearest_pt = nearest_points(point, boundary)
-            if cat not in higher_by_level or dist_miles < higher_by_level[cat][0]:
-                higher_by_level[cat] = (dist_miles, nearest_pt)
-        except Exception:
-            continue
-
-    nearest = None
-    if higher_by_level:
-        for r in RISK_ORDER[current_rank + 1:]:
-            if r in higher_by_level:
-                dist_miles, nearest_pt = higher_by_level[r]
-    
-                # calculates bearings
-                dx = nearest_pt.x - point.x   # longitude (E/W)
-                dy = nearest_pt.y - point.y   # latitude (N/S)
-    
-                # math angle -> actual compass bearing (why is it like this)
-                angle = (450 - degrees(atan2(dy, dx))) % 360
-    
-                dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-                direction = dirs[int((angle + 22.5) // 45) % 8]
-    
-                nearest = (r, int(dist_miles), direction)
-                break
-
-    return risk, sub, nearest, found
 def risk_change(old_risk, new_risk):
-    
-    
-
     if not old_risk:
         return None
-
-    old_rank = RISK_RANK[old_risk]
-    new_rank = RISK_RANK[new_risk]
-
-    if new_rank > old_rank:
+    if RISK_RANK[new_risk] > RISK_RANK[old_risk]:
         return "upgrade"
-
-    if new_rank < old_rank:
+    if RISK_RANK[new_risk] < RISK_RANK[old_risk]:
         return "downgrade"
-
     return "same"
 
-# message building
+def outlook_key(entry):
+    if not entry:
+        return None
+    raw = f"{entry.title}|{entry.link}"
+    return hashlib.sha256(raw.encode()).hexdigest()
 
-embeds = []
-
-discord_content = ""
-
-pending_state = {}
-
-post_day1 = False
-post_day23 = False
-
-message_parts = []
-
-def build_message_hash(parts):
-    """
-    Create a hash representing the
-    exact outlooks being posted.
-    """
-
-    raw = json.dumps(parts, sort_keys=True)
-
-    return hashlib.sha256(
-        raw.encode()
-    ).hexdigest()
-
-# helper functs
-
-
-def should_ping_day1(state, risk, previous_risk):
-    
-
-    change = risk_change(previous_risk, risk)
-
-    if risk == "HIGH" and not state["pinged_high"]:
+def get_ping(risk):
+    if risk in ["MDT", "HIGH"]:
         return "@everyone"
-
-    if risk == "MDT" and not state["pinged_mdt"]:
+    elif risk in ["SLGT", "ENH"]:
         return f"<@&{ROLE_ID}>"
-
-    if risk == "ENH" and not state["pinged_enh"]:
-        return f"<@&{ROLE_ID}>"
-
-    if risk == "SLGT" and not state["pinged_slgt"]:
-        return f"<@&{ROLE_ID}>"
-
-    if change == "upgrade":
-
-        if risk == "HIGH":
-            return "@everyone"
-
-        if risk in ["SLGT", "ENH", "MDT"]:
-            return f"<@&{ROLE_ID}>"
-
     return None
 
+def main():
+    state = load_state()
 
-def should_ping_day23(state, risk, previous_risk):
-    
+    tz = zoneinfo.ZoneInfo('US/Eastern')
+    now = datetime.now(tz)
+    today_str = now.strftime("%Y-%m-%d")
 
-    change = risk_change(previous_risk, risk)
+    feed = feedparser.parse(RSS_URL)
+    entries = list(reversed(feed.entries))
+    day1 = day2 = day3 = None
+    for entry in entries:
+        title = entry.title.lower()
+        if "day 1" in title and day1 is None: day1 = entry
+        elif "day 2" in title and day2 is None: day2 = entry
+        elif "day 3" in title and day3 is None: day3 = entry
 
-    if risk == "HIGH" and not state["pinged_high"]:
-        return "@everyone"
+    day1_k = outlook_key(day1)
+    day2_k = outlook_key(day2)
+    day3_k = outlook_key(day3)
 
-    if risk == "MDT" and not state["pinged_mdt"]:
-        return f"<@&{ROLE_ID}>"
+    is_morning_post = False
+    if state["last_run_date"] != today_str:
+        if now.hour > 6 or (now.hour == 6 and now.minute >= 30):
+            is_morning_post = True
+            state["last_run_date"] = today_str
+        else:
+            # Do nothing before 6:30 AM on a new day to prevent
+yesterday's states
+            # from incorrectly triggering upgrades against today's new
+outlooks.
+            return
 
-    if risk == "ENH" and not state["pinged_enh"]:
-        return f"<@&{ROLE_ID}>"
+    if is_morning_post:
+        r1, sub1, _, _ = get_risk(1, POINT)
+        r2, _, _, _ = get_risk(2, POINT)
+        r3, _, _, _ = get_risk(3, POINT)
 
-    if change == "upgrade":
+        img1 = upload_image("day1otlk.png")
+        img2 = upload_image("day2otlk.png")
+        img3 = upload_image("day3otlk.png")
 
-        if risk == "HIGH":
+        embeds = []
+        highest_risk = max([r1, r2, r3], key=lambda r: RISK_RANK[r])
+        ping = get_ping(highest_risk)
+
+        if img1:
+            desc = f"**{RISK_EMOJIS.get(r1, '')} Risk: {r1}**\n"
+            if r1 != "NONE" and (sub1["tornado"] or sub1["wind"] or
+sub1["hail"]):
+                if sub1["tornado"]: desc += f"🌪️ Tornado:
+{sub1['tornado']}%\n"
+                if sub1["wind"]: desc += f"💨 Wind: {sub1['wind']}%\n"
+                if sub1["hail"]: desc += f"🧊 Hail: {sub1['hail']}%\n"
+            embeds.append({"title": day1.title, "url": day1.link,
+"description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image":
+{"url": img1}})
+
+        if img2:
+            embeds.append({"title": day2.title, "url": day2.link,
+"description": f"**{RISK_EMOJIS.get(r2, '')} Risk: {r2}**", "color":
+RISK_COLORS.get(r2, 0x808080), "thumbnail": {"url": img2}})
+
+        if img3:
+            embeds.append({"title": day3.title, "url": day3.link,
+"description": f"**{RISK_EMOJIS.get(r3, '')} Risk: {r3}**", "color":
+RISK_COLORS.get(r3, 0x808080), "thumbnail": {"url": img3}})
+
+        state["day1_risk"] = r1
+        state["day2_risk"] = r2
+        state["day3_risk"] = r3
+        state["day1_key"] = day1_k
+        state["day2_key"] = day2_k
+        state["day3_key"] = day3_k
+
+        content = f"<@{MY_ID}>"
+        if ping: content += f" {ping}"
+
+        requests.post(f"{WEBHOOK_URL}?wait=true", json={"content":
+content, "embeds": embeds}, timeout=30)
+        save_state(state)
+        return
+
+    # Check for upgrades
+    embeds = []
+    ping_content = ""
+
+    def update_ping(current_ping, new_risk):
+        if new_risk in ["MDT", "HIGH"]:
             return "@everyone"
-
-        if risk in ["ENH", "MDT"]:
+        if current_ping != "@everyone":
             return f"<@&{ROLE_ID}>"
+        return current_ping
 
-    return None
+    if day1_k and day1_k != state["day1_key"]:
+        r1, sub1, _, _ = get_risk(1, POINT)
+        if risk_change(state["day1_risk"], r1) == "upgrade":
+            img1 = upload_image("day1otlk.png")
+            if img1:
+                desc = f"**{RISK_EMOJIS.get(r1, '')} Risk: {r1}** **(⚠️
+UP FROM {state['day1_risk']})**\n"
+                ping_content = update_ping(ping_content, r1)
+                if RISK_RANK[r1] >= RISK_RANK["SLGT"]:
+                    if sub1["tornado"]: desc += f"🌪️ Tornado:
+{sub1['tornado']}%\n"
+                    if sub1["wind"]: desc += f"💨 Wind:
+{sub1['wind']}%\n"
+                    if sub1["hail"]: desc += f"🧊 Hail:
+{sub1['hail']}%\n"
+                    embeds.append({"title": day1.title, "url": day1.link,
+"description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image":
+{"url": img1}})
+                else:
+                    embeds.append({"title": day1.title, "url": day1.link,
+"description": desc, "color": RISK_COLORS.get(r1, 0x808080), "thumbnail":
+{"url": img1}})
+        state["day1_risk"] = r1
+        state["day1_key"] = day1_k
 
-# day 1
-if day1_new:
-    entry = day1
-    print(f"Prepared Day 1")
-    img = upload_image("day1otlk.png")
-    if img:
-        risk, sub, nearest, found = get_risk(1, POINT)
-        prev_risk = state.get("last_day1_risk")
-        trend = ""
-        emoji = RISK_EMOJIS.get(risk, "")
-        if prev_risk and prev_risk != risk:
-            if RISK_RANK[risk] > RISK_RANK[prev_risk]:
-                trend = (
-                    f"**{emoji} Risk: {risk}** "
-                    f" **(⚠️ UP FROM {prev_risk})**\n"
-                )
-            else:
-                trend = f"**{emoji} Risk: {risk}**\n"
-        else:
-            trend = f"**{emoji} Risk: {risk}**\n"
+    if day2_k and day2_k != state["day2_key"]:
+        r2, _, _, _ = get_risk(2, POINT)
+        if risk_change(state["day2_risk"], r2) == "upgrade" and
+RISK_RANK[r2] >= RISK_RANK["MRGL"]:
+            img2 = upload_image("day2otlk.png")
+            if img2:
+                desc = f"**{RISK_EMOJIS.get(r2, '')} Risk: {r2}** **(⚠️
+UP FROM {state['day2_risk']})**\n"
+                ping_content = update_ping(ping_content, r2)
+                embeds.append({"title": day2.title, "url": day2.link,
+"description": desc, "color": RISK_COLORS.get(r2, 0x808080), "thumbnail":
+{"url": img2}})
+        state["day2_risk"] = r2
+        state["day2_key"] = day2_k
 
-        # ping logic
-        ping = None
-        change_is_upgrade = (
-            prev_risk
-            and RISK_RANK[risk] > RISK_RANK[prev_risk]
-        )
-        if risk == "HIGH":
+    if day3_k and day3_k != state["day3_key"]:
+        r3, _, _, _ = get_risk(3, POINT)
+        if risk_change(state["day3_risk"], r3) == "upgrade" and
+RISK_RANK[r3] >= RISK_RANK["SLGT"]:
+            img3 = upload_image("day3otlk.png")
+            if img3:
+                desc = f"**{RISK_EMOJIS.get(r3, '')} Risk: {r3}** **(⚠️
+UP FROM {state['day3_risk']})**\n"
+                ping_content = update_ping(ping_content, r3)
+                embeds.append({"title": day3.title, "url": day3.link,
+"description": desc, "color": RISK_COLORS.get(r3, 0x808080), "thumbnail":
+{"url": img3}})
+        state["day3_risk"] = r3
+        state["day3_key"] = day3_k
 
-            if (
-                not state["pinged_high"]
-                or change_is_upgrade
-            ):
-                ping = "@everyone"
-                pending_state["pinged_high"] = True
-        elif risk == "MDT":
-            if (
-                not state["pinged_mdt"]
-                or change_is_upgrade
-            ):
-                ping = f"<@&{ROLE_ID}>"
-                pending_state["pinged_mdt"] = True
-        elif risk == "ENH":
-            if (
-                not state["pinged_enh"]
-                or change_is_upgrade
-            ):
-                ping = f"<@&{ROLE_ID}>"
-                pending_state["pinged_enh"] = True
-        elif risk == "SLGT":
-            if (
-                not state["pinged_slgt"]
-                or change_is_upgrade
-            ):
-                ping = f"<@&{ROLE_ID}>"
-                pending_state["pinged_slgt"] = True
-        if ping and not discord_content:
-            discord_content = ping
-            
-        lines = [trend]
-        tor, wind, hail, sig = sub["tornado"], sub["wind"], sub["hail"], sub["sig"]
-        if tor or wind or hail:
-            if tor: lines.append(f"🌪️ Tornado: {tor}%")
-            if wind: lines.append(f"💨 Wind: {wind}%")
-            if hail: lines.append(f"🧊 Hail: {hail}%")
-        else:
-            lines.append("No tornado, wind, or hail risk.")
-
-        if nearest:
-            nearest_emoji = RISK_EMOJIS.get(nearest[0], "")
-            lines.append(f"\n Nearest higher risk: {nearest_emoji} {nearest[0]} (~{nearest[1]} mi {nearest[2]})")
-        else:
-            lines.append("No higher risk levels in CONUS.")
-
-        embeds.append({
-            "title": entry.title,
-            "url": entry.link,
-            "description": "\n".join(lines),
-            "color": RISK_COLORS.get(risk, 0x808080),
-            "image": {"url": img}
-        })
-
-        # Stage state updates (not applied until Discord confirms)
-        pending_state["posted_day1"] = day1_key
-        pending_state["last_day1_risk"] = risk
-
-        message_parts.append(
-            f"day1:{day1_key}"
-        )
-         
-# This tries to pair day 2 and 3 and I think it works???
-
-day23_ready = False
-
-if day2_new and day3_new:
-
-    day23_ready = True
-
-elif day2_new and not day3_new:
-
-    print("Holding Day 2 until Day 3 updates")
-
-    state["waiting_day2"] = day2_key
+    if embeds:
+        content = f"<@{MY_ID}>"
+        if ping_content: content += f" {ping_content}"
+        requests.post(f"{WEBHOOK_URL}?wait=true", json={"content":
+content, "embeds": embeds}, timeout=30)
 
     save_state(state)
 
-elif day3_new and not day2_new:
-
-    print("Holding Day 3 until Day 2 updates")
-
-    state["waiting_day3"] = day3_key
-
-    save_state(state)
-
-elif (
-    state.get("waiting_day2") == day2_key
-    and day3_new
-):
-
-    day23_ready = True
-
-elif (
-    state.get("waiting_day3") == day3_key
-    and day2_new
-):
-
-    day23_ready = True
-
-
-# Posting day 2 and 3
-if day23_ready:
-
-    print("Prepared Day 2/3")
-
-
-    img2 = upload_image("day2otlk.png")
-    img3 = upload_image("day3otlk.png")
-
-    if img2 and img3:
-
-        r2, sub2, nearest2, found2 = get_risk(2, POINT)
-        r3, sub3, nearest3, found3 = get_risk(3, POINT)
-
-       
-
-        prev_r2 = state.get("last_day2_risk")
-
-        emoji2 = RISK_EMOJIS.get(r2, "")
-
-        trend2 = ""
-
-        if prev_r2:
-
-            if RISK_RANK[r2] > RISK_RANK[prev_r2]:
-                trend2 = (
-                    f"{emoji2} Risk: {r2} "
-                    f"** (⚠️ UP FROM {prev_r2})**"
-                )
-
-            elif RISK_RANK[r2] < RISK_RANK[prev_r2]:
-                trend2 = (
-                    f"{emoji2} Risk: {r2} "
-                    f"(down from {prev_r2})"
-                )
-
-            else:
-                trend2 = f"{emoji2} Risk: {r2}"
-
-        else:
-
-            trend2 = f"{emoji2} Risk: {r2}"
-
-       
-
-        prev_r3 = state.get("last_day3_risk")
-
-        emoji3 = RISK_EMOJIS.get(r3, "")
-
-        trend3 = ""
-
-        if prev_r3:
-
-            if RISK_RANK[r3] > RISK_RANK[prev_r3]:
-                trend3 = (
-                    f"{emoji3} Risk: {r3} "
-                    f"** (⚠️ UP FROM {prev_r3})**"
-                )
-
-            elif RISK_RANK[r3] < RISK_RANK[prev_r3]:
-                trend3 = (
-                    f"{emoji3} Risk: {r3} "
-                    f"(down from {prev_r3})"
-                )
-
-            else:
-                trend3 = f"{emoji3} Risk: {r3}"
-
-        else:
-
-            trend3 = f"{emoji3} Risk: {r3}"
-
-        
-        highest_risk = max(
-            [r2, r3],
-            key=lambda r: RISK_RANK[r]
-        )
-
-        if not discord_content:
-            upgrade = False
-            
-            if (
-                prev_r2
-                and RISK_RANK[r2] > RISK_RANK[prev_r2]
-            ):
-                upgrade = True
-            
-            if (
-                prev_r3
-                and RISK_RANK[r3] > RISK_RANK[prev_r3]
-            ):
-                upgrade = True
-
-            if highest_risk == "HIGH":
-
-                if (
-                    not state["pinged_high"]
-                    or upgrade
-                ):
-                    discord_content = "@everyone"
-                    pending_state["pinged_high"] = True
-
-            elif highest_risk == "MDT":
-
-                if (
-                    not state["pinged_mdt"]
-                    or upgrade
-                ):
-                    discord_content = f"<@&{ROLE_ID}>"
-                    pending_state["pinged_mdt"] = True
-
-            elif highest_risk == "ENH":
-
-                if (
-                    not state["pinged_enh"]
-                    or upgrade
-                ):
-                    discord_content = f"<@&{ROLE_ID}>"
-                    pending_state["pinged_enh"] = True
-
-        embeds.append({
-            "title": "SPC Day 2 Outlook",
-            "url": day2.link,
-            "description": trend2,
-            "color": RISK_COLORS.get(r2, 0x808080),
-            "thumbnail": {"url": img2}
-        })
-
-        embeds.append({
-            "title": "SPC Day 3 Outlook",
-            "url": day3.link,
-            "description": trend3,
-            "color": RISK_COLORS.get(r3, 0x808080),
-            "thumbnail": {"url": img3}
-        })
-
-        # Stage state updates
-
-        pending_state["posted_day2"] = day2_key
-        pending_state["posted_day3"] = day3_key
-
-        pending_state["waiting_day2"] = None
-        pending_state["waiting_day3"] = None
-
-        pending_state["last_day2_risk"] = r2
-        pending_state["last_day3_risk"] = r3
-
-        message_parts.append(f"day2:{day2_key}")
-        message_parts.append(f"day3:{day3_key}")
-        
-if embeds:
-
-    # Build duplicate-protection hash
-    message_hash = build_message_hash(
-        message_parts
-    )
-
-    now = int(time.time())
-
-    if (
-        message_hash == state.get("last_message_hash", "")
-        and
-        now - state.get("last_post_time", 0)
-        < POST_COOLDOWN_SECONDS
-    ):
-
-        print(
-            "Duplicate message blocked "
-            "(hash + cooldown)"
-        )
-
-    else:
-
-        final_content = f"<@{MY_ID}>"
-
-        if discord_content:
-            final_content += f" {discord_content}"
-
-        old_message_id = state.get("message_id")
-
-        if old_message_id:
-            try:
-                requests.delete(
-                    f"{WEBHOOK_URL}/messages/{old_message_id}",
-                    timeout=15
-                )
-                print(f"Deleted old message {old_message_id}")
-            except Exception as e:
-                print(f"Delete failed: {e}")
-
-        discord_response = requests.post(
-            f"{WEBHOOK_URL}?wait=true",
-            json={
-                "content": final_content,
-                "embeds": embeds
-            },
-            timeout=30
-        )
-
-        if discord_response.status_code == 200:
-
-            data = discord_response.json()
-
-            pending_state["message_id"] = data["id"]
-           
-            pending_state["last_message_hash"] = (
-                message_hash
-            )
-
-            pending_state["last_post_time"] = now
-
-            # Apply all staged updates
-            state.update(pending_state)
-
-            save_state(state)
-
-            print("Posted to Discord")
-            
-
-        else:
-
-            print(
-                "Discord error:",
-                discord_response.text
-            )
-
-            print(
-                "State NOT saved — "
-                "will retry next run"
-            )
-
-else:
-
-    print("Nothing to post")
-    
+if __name__ == "__main__":
+    main()
