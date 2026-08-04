@@ -33,15 +33,15 @@ data = r.json()
 
 fake_alert = {
     "properties": {
-        "event": "Tornado Warning",
-        "headline": "TEST Tornado Warning issued for Allegheny, PA",
-        "description": "This is a PARTICULARLY DANGEROUS SITUATION. A large and extremely dangerous tornado is on the ground. (TEST)",
-        "instruction": "Take cover now! (TEST)",
-        "severity": "Extreme",
+        "event": "Winter Weather Advisory",
+        "headline": "TEST Winter Weather Advisory issued for Allegheny, PA",
+        "description": "Freezing rain and sleet expected overnight. (TEST)",
+        "instruction": "Slow down and use caution while traveling. (TEST)",
+        "severity": "Minor",
         "areaDesc": "Allegheny",
         "ends": "2026-08-04T20:00:00Z",
         "parameters": {
-            "VTEC": ["/O.CON.KPBZ.TO.W.0100.240804T1900Z-240804T2000Z/"]
+            "VTEC": ["/O.NEW.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
         }
     },
     "geometry": {
