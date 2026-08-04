@@ -34,6 +34,7 @@ jobs:
           for i in {1..18}
           do
             echo "Run #$i"
+            python spc_bot.py
             python warnings_bot.py
             echo "Sleeping for 90 seconds..."
             sleep 90
