@@ -213,7 +213,7 @@ def main():
         highest_risk = max([r1, r2, r3], key=lambda r: RISK_RANK[r])
         ping = get_ping(highest_risk)
 
-        if img1:
+        if day1 and img1:
             desc = f"**{RISK_EMOJIS.get(r1, '')} Risk: {r1}**\n"
             if r1 != "NONE" and (sub1["tornado"] or sub1["wind"] or sub1["hail"]):
                 if sub1["tornado"]: desc += f"🌪️ Tornado: {sub1['tornado']}%\n"
@@ -221,10 +221,10 @@ def main():
                 if sub1["hail"]: desc += f"🧊 Hail: {sub1['hail']}%\n"
             embeds.append({"title": day1.title, "url": day1.link, "description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image": {"url": img1}})
 
-        if img2:
+        if day2 and img2:
             embeds.append({"title": day2.title, "url": day2.link, "description": f"**{RISK_EMOJIS.get(r2, '')} Risk: {r2}**", "color": RISK_COLORS.get(r2, 0x808080), "thumbnail": {"url": img2}})
 
-        if img3:
+        if day3 and img3:
             embeds.append({"title": day3.title, "url": day3.link, "description": f"**{RISK_EMOJIS.get(r3, '')} Risk: {r3}**", "color": RISK_COLORS.get(r3, 0x808080), "thumbnail": {"url": img3}})
 
         state["day1_risk"] = r1
