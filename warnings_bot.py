@@ -41,7 +41,7 @@ fake_alert = {
         "areaDesc": "Allegheny",
         "ends": "2027-11-09T10:00:00Z",
         "parameters": {
-            "VTEC": ["/O.EXT.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
+            "VTEC": ["/O.CAN.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
         }
     },
     "geometry": {
