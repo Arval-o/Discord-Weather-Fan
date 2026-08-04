@@ -39,9 +39,9 @@ fake_alert = {
         "instruction": "Slow down and use caution while traveling. (TEST)",
         "severity": "Minor",
         "areaDesc": "Allegheny",
-        "ends": "2026-08-04T20:00:00Z",
+        "ends": "2026-08-04T20:20:00Z",
         "parameters": {
-            "VTEC": ["/O.NEW.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
+            "VTEC": ["/O.CON.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
         }
     },
     "geometry": {
