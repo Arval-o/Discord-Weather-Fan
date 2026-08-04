@@ -32,8 +32,7 @@ SAMPLE_RADIUS = 0.008
 RISK_ORDER = ["NONE", "TSTM", "MRGL", "SLGT", "ENH", "MDT", "HIGH"]
 RISK_RANK = {risk: idx for idx, risk in enumerate(RISK_ORDER)}
 
-MAPSERVER = "https://mapservices.weather.noaa.
-gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer"
+MAPSERVER = "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer"
 LAYER_IDS = {
     "cat": {1: 1, 2: 9, 3: 17},
     "torn": {1: 3},
@@ -41,12 +40,10 @@ LAYER_IDS = {
     "wind": {1: 7}
 }
 
-DN_TO_RISK = {2: "TSTM", 3: "MRGL", 4: "SLGT", 5: "ENH", 6: "MDT", 8:
-"HIGH"}
+DN_TO_RISK = {2: "TSTM", 3: "MRGL", 4: "SLGT", 5: "ENH", 6: "MDT", 8: "HIGH"}
 
 RISK_COLORS = {
-    "NONE": 0x808080, "TSTM": 0x90EE90, "MRGL": 0x006400, "SLGT":
-0xFFFF00,
+    "NONE": 0x808080, "TSTM": 0x90EE90, "MRGL": 0x006400, "SLGT": 0xFFFF00,
     "ENH": 0xFFA500, "MDT": 0xFF0000, "HIGH": 0x8B0000,
 }
 
@@ -80,32 +77,26 @@ def save_state(state):
         json.dump(state, f, indent=2)
 
 def upload_image(filename):
-    img_response = requests.get(f"https://www.spc.noaa.
-gov/products/outlook/{filename}")
+    img_response = requests.get(f"https://www.spc.noaa.gov/products/outlook/{filename}")
     if img_response.status_code != 200:
         return None
     with open(filename, "wb") as img_file:
         img_file.write(img_response.content)
-    api = f"https://api.github.
-com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
+    api = f"https://api.github.com/repos/{REPO}/contents/{PAGE_FOLDER}/{filename}"
     headers = {"Authorization": f"token {GH_TOKEN}"}
     check_response = requests.get(api, headers=headers)
-    sha = check_response.json().get("sha") if check_response.status_code
-== 200 else None
+    sha = check_response.json().get("sha") if check_response.status_code == 200 else None
     with open(filename, "rb") as img_file:
         content_b64 = base64.b64encode(img_file.read()).decode()
-    payload = {"message": f"update {filename}", "content": content_b64,
-"branch": BRANCH}
+    payload = {"message": f"update {filename}", "content": content_b64, "branch": BRANCH}
     if sha:
         payload["sha"] = sha
-    put_response = requests.put(api, headers=headers, data=json.
-dumps(payload))
+    put_response = requests.put(api, headers=headers, data=json.dumps(payload))
     os.remove(filename)
     if put_response.status_code not in (200, 201):
         return None
     user, repo_name = REPO.split("/")
-    return f"https://{user}.github.io/{repo_name}/{filename}?t={int(time.
-time())}"
+    return f"https://{user}.github.io/{repo_name}/{filename}?t={int(time.time())}"
 
 def query_layer(layer_id):
     url = f"{MAPSERVER}/{layer_id}/query"
@@ -153,8 +144,7 @@ def get_risk(day, point):
                     geom = shape(f["geometry"])
                     if geom.intersects(sample_box):
                         dn = f["properties"].get("dn", 0)
-                        sub[prob_key] = max(sub[prob_key], int(dn) if dn
-else 0)
+                        sub[prob_key] = max(sub[prob_key], int(dn) if dn else 0)
                         if int(dn or 0) >= 10:
                             sub["sig"] = True
                 except Exception:
@@ -209,10 +199,6 @@ def main():
             is_morning_post = True
             state["last_run_date"] = today_str
         else:
-            # Do nothing before 6:30 AM on a new day to prevent
-yesterday's states
-            # from incorrectly triggering upgrades against today's new
-outlooks.
             return
 
     if is_morning_post:
@@ -230,25 +216,17 @@ outlooks.
 
         if img1:
             desc = f"**{RISK_EMOJIS.get(r1, '')} Risk: {r1}**\n"
-            if r1 != "NONE" and (sub1["tornado"] or sub1["wind"] or
-sub1["hail"]):
-                if sub1["tornado"]: desc += f"🌪️ Tornado:
-{sub1['tornado']}%\n"
+            if r1 != "NONE" and (sub1["tornado"] or sub1["wind"] or sub1["hail"]):
+                if sub1["tornado"]: desc += f"🌪️ Tornado: {sub1['tornado']}%\n"
                 if sub1["wind"]: desc += f"💨 Wind: {sub1['wind']}%\n"
                 if sub1["hail"]: desc += f"🧊 Hail: {sub1['hail']}%\n"
-            embeds.append({"title": day1.title, "url": day1.link,
-"description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image":
-{"url": img1}})
+            embeds.append({"title": day1.title, "url": day1.link, "description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image": {"url": img1}})
 
         if img2:
-            embeds.append({"title": day2.title, "url": day2.link,
-"description": f"**{RISK_EMOJIS.get(r2, '')} Risk: {r2}**", "color":
-RISK_COLORS.get(r2, 0x808080), "thumbnail": {"url": img2}})
+            embeds.append({"title": day2.title, "url": day2.link, "description": f"**{RISK_EMOJIS.get(r2, '')} Risk: {r2}**", "color": RISK_COLORS.get(r2, 0x808080), "thumbnail": {"url": img2}})
 
         if img3:
-            embeds.append({"title": day3.title, "url": day3.link,
-"description": f"**{RISK_EMOJIS.get(r3, '')} Risk: {r3}**", "color":
-RISK_COLORS.get(r3, 0x808080), "thumbnail": {"url": img3}})
+            embeds.append({"title": day3.title, "url": day3.link, "description": f"**{RISK_EMOJIS.get(r3, '')} Risk: {r3}**", "color": RISK_COLORS.get(r3, 0x808080), "thumbnail": {"url": img3}})
 
         state["day1_risk"] = r1
         state["day2_risk"] = r2
@@ -260,8 +238,7 @@ RISK_COLORS.get(r3, 0x808080), "thumbnail": {"url": img3}})
         content = f"<@{MY_ID}>"
         if ping: content += f" {ping}"
 
-        requests.post(f"{WEBHOOK_URL}?wait=true", json={"content":
-content, "embeds": embeds}, timeout=30)
+        requests.post(f"{WEBHOOK_URL}?wait=true", json={"content": content, "embeds": embeds}, timeout=30)
         save_state(state)
         return
 
@@ -280,62 +257,45 @@ content, "embeds": embeds}, timeout=30)
         r1, sub1, _, _ = get_risk(1, POINT)
         if risk_change(state["day1_risk"], r1) == "upgrade":
             img1 = upload_image("day1otlk.png")
-            if img1:
-                desc = f"**{RISK_EMOJIS.get(r1, '')} Risk: {r1}** **(⚠️
-UP FROM {state['day1_risk']})**\n"
+        if img1:
+                desc = f"**{RISK_EMOJIS.get(r1, '')} Risk: {r1}** **(⚠️ UP FROM {state['day1_risk']})**\n"
                 ping_content = update_ping(ping_content, r1)
                 if RISK_RANK[r1] >= RISK_RANK["SLGT"]:
-                    if sub1["tornado"]: desc += f"🌪️ Tornado:
-{sub1['tornado']}%\n"
-                    if sub1["wind"]: desc += f"💨 Wind:
-{sub1['wind']}%\n"
-                    if sub1["hail"]: desc += f"🧊 Hail:
-{sub1['hail']}%\n"
-                    embeds.append({"title": day1.title, "url": day1.link,
-"description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image":
-{"url": img1}})
+            if sub1["tornado"]: desc += f"🌪️ Tornado: {sub1['tornado']}%\n"
+            if sub1["wind"]: desc += f"💨 Wind: {sub1['wind']}%\n"
+            if sub1["hail"]: desc += f"🧊 Hail: {sub1['hail']}%\n"
+            embeds.append({"title": day1.title, "url": day1.link, "description": desc, "color": RISK_COLORS.get(r1, 0x808080), "image": {"url": img1}})
                 else:
-                    embeds.append({"title": day1.title, "url": day1.link,
-"description": desc, "color": RISK_COLORS.get(r1, 0x808080), "thumbnail":
-{"url": img1}})
+            embeds.append({"title": day1.title, "url": day1.link, "description": desc, "color": RISK_COLORS.get(r1, 0x808080), "thumbnail": {"url": img1}})
         state["day1_risk"] = r1
         state["day1_key"] = day1_k
 
     if day2_k and day2_k != state["day2_key"]:
         r2, _, _, _ = get_risk(2, POINT)
-        if risk_change(state["day2_risk"], r2) == "upgrade" and
-RISK_RANK[r2] >= RISK_RANK["MRGL"]:
+        if risk_change(state["day2_risk"], r2) == "upgrade" and RISK_RANK[r2] >= RISK_RANK["MRGL"]:
             img2 = upload_image("day2otlk.png")
             if img2:
-                desc = f"**{RISK_EMOJIS.get(r2, '')} Risk: {r2}** **(⚠️
-UP FROM {state['day2_risk']})**\n"
+                desc = f"**{RISK_EMOJIS.get(r2, '')} Risk: {r2}** **(⚠️ UP FROM {state['day2_risk']})**\n"
                 ping_content = update_ping(ping_content, r2)
-                embeds.append({"title": day2.title, "url": day2.link,
-"description": desc, "color": RISK_COLORS.get(r2, 0x808080), "thumbnail":
-{"url": img2}})
+                embeds.append({"title": day2.title, "url": day2.link, "description": desc, "color": RISK_COLORS.get(r2, 0x808080), "thumbnail": {"url": img2}})
         state["day2_risk"] = r2
         state["day2_key"] = day2_k
 
     if day3_k and day3_k != state["day3_key"]:
         r3, _, _, _ = get_risk(3, POINT)
-        if risk_change(state["day3_risk"], r3) == "upgrade" and
-RISK_RANK[r3] >= RISK_RANK["SLGT"]:
+        if risk_change(state["day3_risk"], r3) == "upgrade" and RISK_RANK[r3] >= RISK_RANK["SLGT"]:
             img3 = upload_image("day3otlk.png")
             if img3:
-                desc = f"**{RISK_EMOJIS.get(r3, '')} Risk: {r3}** **(⚠️
-UP FROM {state['day3_risk']})**\n"
+                desc = f"**{RISK_EMOJIS.get(r3, '')} Risk: {r3}** **(⚠️ UP FROM {state['day3_risk']})**\n"
                 ping_content = update_ping(ping_content, r3)
-                embeds.append({"title": day3.title, "url": day3.link,
-"description": desc, "color": RISK_COLORS.get(r3, 0x808080), "thumbnail":
-{"url": img3}})
+                embeds.append({"title": day3.title, "url": day3.link, "description": desc, "color": RISK_COLORS.get(r3, 0x808080), "thumbnail": {"url": img3}})
         state["day3_risk"] = r3
         state["day3_key"] = day3_k
 
     if embeds:
         content = f"<@{MY_ID}>"
         if ping_content: content += f" {ping_content}"
-        requests.post(f"{WEBHOOK_URL}?wait=true", json={"content":
-content, "embeds": embeds}, timeout=30)
+        requests.post(f"{WEBHOOK_URL}?wait=true", json={"content": content, "embeds": embeds}, timeout=30)
 
     save_state(state)
 
