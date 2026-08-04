@@ -41,6 +41,7 @@ jobs:
           done
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Commit updated state files
         run: |
