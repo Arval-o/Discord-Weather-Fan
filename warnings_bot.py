@@ -41,7 +41,7 @@ fake_alert = {
         "areaDesc": "Allegheny",
         "ends": "2026-08-04T20:20:00Z",
         "parameters": {
-            "VTEC": ["/O.CON.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
+            "VTEC": ["/O.CAN.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
         }
     },
     "geometry": {
@@ -248,7 +248,7 @@ for alert in data.get("features", []):
                 "title": f"The {event} has been canceled.",
                 "description":
                     f"There is no more threat to the area.",
-                "color": 808080
+                "color": 0x808080
             }
         payload = {
                 "content": "",
