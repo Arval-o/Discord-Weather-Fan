@@ -39,9 +39,9 @@ fake_alert = {
         "instruction": "Lock all doors and windows, and stay out of sight. If you are seen, you are dead. Do not attempt to rescue loved ones who have been caught - it is too late for them..",
         "severity": "Extreme",
         "areaDesc": "Allegheny",
-        "ends": "2026-08-04T21:30:00Z",
+        "ends": "2027-11-09T10:00:00Z",
         "parameters": {
-            "VTEC": ["/O.NEW.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
+            "VTEC": ["/O.EXT.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
         }
     },
     "geometry": {
