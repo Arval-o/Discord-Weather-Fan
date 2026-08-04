@@ -39,9 +39,9 @@ fake_alert = {
         "instruction": "Take cover now! [Further instructions would follow were this warning real]",
         "severity": "Extreme",
         "areaDesc": "Allegheny",
-        "ends": "2026-08-04T20:00:00Z",
+        "ends": "2026-08-04T22:00:00Z",
         "parameters": {
-            "VTEC": ["/O.NEW.KPBZ.TO.W.0099.240804T1900Z-240804T2000Z/"]
+            "VTEC": ["/O.EXT.KPBZ.TO.W.0099.240804T1900Z-240804T2000Z/"]
         }
     },
     "geometry": {
