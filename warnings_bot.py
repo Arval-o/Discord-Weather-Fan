@@ -34,14 +34,14 @@ data = r.json()
 fake_alert = {
     "properties": {
         "event": "Tornado Warning",
-        "headline": "Tornado Warning issued for Allegheny, PA",
-        "description": "This is a test. There is no threat to the area.",
-        "instruction": "Take cover now! [Further instructions would follow were this warning real]",
+        "headline": "TEST Tornado Warning issued for Allegheny, PA",
+        "description": "This is a PARTICULARLY DANGEROUS SITUATION. A large and extremely dangerous tornado is on the ground. (TEST)",
+        "instruction": "Take cover now! (TEST)",
         "severity": "Extreme",
         "areaDesc": "Allegheny",
-        "ends": "2026-08-04T22:00:00Z",
+        "ends": "2026-08-04T20:00:00Z",
         "parameters": {
-            "VTEC": ["/O.CAN.KPBZ.TO.W.0099.240804T1900Z-240804T2000Z/"]
+            "VTEC": ["/O.NEW.KPBZ.TO.W.0100.240804T1900Z-240804T2000Z/"]
         }
     },
     "geometry": {
@@ -224,7 +224,7 @@ for alert in data.get("features", []):
         old_expire = existing.get("expires")
         if expires != old_expire:
             update_embed = {
-                "title": f"{event} Extended",
+                "title": f"The {event} has been extended.",
                 "description":
                     f"Previous expiration: {discord_time(old_expire)}\n"
                     f"New expiration: {discord_time(expires)}",
@@ -245,7 +245,7 @@ for alert in data.get("features", []):
 
     if existing and action == "CAN":
         cancel_embed = {
-                "title": f"{event} has been canceled.",
+                "title": f"The {event} has been canceled.",
                 "description":
                     f"There is no more threat to the area.",
                 "color": 808080
@@ -284,6 +284,7 @@ for alert in data.get("features", []):
             "color": color,
             "fields": [
                 {"name": "Severity", "value": severity, "inline": True},
+                {"name": "Expires", "value": {discord_time(expires)}, "inline": True},
                 {"name": "Instructions", "value": instruction, "inline": False},
                 {"name": "Radar", "value": "[Open Radar](https://radar.weather.gov/station/kpbz/standard)", "inline": False}
             ],
