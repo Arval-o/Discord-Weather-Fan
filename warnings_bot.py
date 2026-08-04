@@ -31,6 +31,25 @@ if r.status_code != 200:
 
 data = r.json()
 
+fake_alert = {
+    "properties": {
+        "event": "Tornado Warning",
+        "headline": "Tornado Warning issued for Allegheny, PA",
+        "description": "This is a test. There is no threat to the area.",
+        "instruction": "Take cover now! [Further instructions would follow were this warning real]",
+        "severity": "Extreme",
+        "areaDesc": "Allegheny",
+        "ends": "2026-08-04T20:00:00Z",
+        "parameters": {
+            "VTEC": ["/O.NEW.KPBZ.TO.W.0099.240804T1900Z-240804T2000Z/"]
+        }
+    },
+    "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[ -80.0, 40.6 ], [ -79.0, 40.6 ], [ -79.0, 41.0 ]]]
+    }
+}
+data["features"].append(fake_alert)
 
 def get_vtec(props):
     vtec_list = props.get("parameters", {}).get("VTEC", [])
