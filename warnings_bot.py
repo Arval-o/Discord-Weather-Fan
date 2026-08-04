@@ -31,26 +31,6 @@ if r.status_code != 200:
 
 data = r.json()
 
-fake_alert = {
-    "properties": {
-        "event": "Tung Tung Tung Sahur Advisory",
-        "headline": "A Tung Tung Tung Sahur Advisory is in effect until August 4 at 11:30pm EDT.",
-        "description": "**THIS IS A PARTICULARLY DANGEROUS SITUATION** Tung Tung Tung Sahur was sighted near Lucas Liu's house. He is likely no longer with us, but you must take steps to ensure your survival. There is an EXTREME threat to life and property!",
-        "instruction": "Lock all doors and windows, and stay out of sight. If you are seen, you are dead. Do not attempt to rescue loved ones who have been caught - it is too late for them..",
-        "severity": "Extreme",
-        "areaDesc": "Allegheny",
-        "ends": "2027-11-09T10:00:00Z",
-        "parameters": {
-            "VTEC": ["/O.CAN.KPBZ.WW.Y.0101.240804T1900Z-240804T2000Z/"]
-        }
-    },
-    "geometry": {
-        "type": "Polygon",
-        "coordinates": [[[ -80.0, 40.6 ], [ -79.0, 40.6 ], [ -79.0, 41.0 ]]]
-    }
-}
-data["features"].append(fake_alert)
-
 def get_vtec(props):
     vtec_list = props.get("parameters", {}).get("VTEC", [])
     return vtec_list[0] if vtec_list else None
