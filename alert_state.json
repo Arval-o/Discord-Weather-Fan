@@ -2,5 +2,9 @@
   "TO.W.0100": {
     "event": "Tornado Warning",
     "expires": "2026-08-04T20:00:00Z"
+  },
+  "FF.W.0075": {
+    "event": "Flash Flood Warning",
+    "expires": "2026-08-05T22:00:00-04:00"
   }
 }
