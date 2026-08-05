@@ -53,7 +53,7 @@ def fetch_probsevere():
         return None
 
 def post_to_discord(content):
-    if WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_URL_HERE":
+    if WEBHOOK_URL == None:
         print("Webhook URL not set! Please update the configuration.")
         return
 
