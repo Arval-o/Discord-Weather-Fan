@@ -6,7 +6,7 @@ WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 GH_TOKEN = os.environ["GH_TOKEN"]
 
 STATE_FILE = "state.json"
-PROBSEVERE_URL = "https://mesonet.agron.iastate.edu/geojson/probsevere.geojson"
+PROBSEVERE_URL = "https://mrms.ncep.noaa.gov/ProbSevere/PROBSEVERE/"
 
 ROLE_ID = "1485401778962043021"
 MY_ID = "1109224984984956968"
