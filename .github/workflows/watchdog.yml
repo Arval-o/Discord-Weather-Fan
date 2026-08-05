@@ -2,7 +2,7 @@ name: Watchdog
 
 on:
   workflow_run:
-    workflows: ["Weather Bot(s)"]
+    workflows: ["Weather Bots"]
     types:
       - completed
 
