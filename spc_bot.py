@@ -13,7 +13,7 @@ from shapely.ops import nearest_points, unary_union
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 GH_TOKEN = os.environ["GH_TOKEN"]
 
-REPO = "arval-o/Discord-Weather-Fan"
+REPO = "arval-o/Discord-Weather-Minion"
 BRANCH = "main"
 PAGE_FOLDER = "docs"
 
