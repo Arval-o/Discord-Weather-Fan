@@ -9,7 +9,7 @@ from shapely.affinity import translate
 BASE_URL = "https://mrms.ncep.noaa.gov/ProbSevere/PROBSEVERE/"
 STATE_FILE = "probsevere_state.json"
 
-WEBHOOK_URL = os.environ["WEBHOOK_URL"]
+WEBHOOK_URL = os.environ["PROBSEVERE_WEBHOOK_URL"]
 ROLE_ID = "1485401778962043021"
 MY_ID = "1109224984984956968"
 
