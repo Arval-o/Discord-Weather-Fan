@@ -95,8 +95,7 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
         # Arrow
         me = float(storm_props.get("MOTION_EAST", 0)) / 60.0
         ms = float(storm_props.get("MOTION_SOUTH", 0)) / 60.0
-        ax1.arrow(lon, lat, me, -ms, color='black', width=0.02, head_width=0.08,
-                  transform=ccrs.PlateCarree(), zorder=10)
+        ax1.plot([lon, lon + me], [lat, lat - ms], color='black', linewidth=4, transform=ccrs.PlateCarree(), zorder=10)
 
     # Reflectivity (zoomed in)
     ax2 = fig.add_subplot(222, projection=ccrs.PlateCarree())
