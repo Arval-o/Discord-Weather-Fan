@@ -37,7 +37,13 @@ def download_latest_scan(radar_id):
     scans = conn.get_avail_scans(now.year, "{:02d}".format(now.month), "{:02d}".format(now.day), radar_id)
     if not scans:
         return None
-    latest_scan = scans[-1]
+
+    # Filter out metadata files, we only want raw volume scans
+    valid_scans = [s for s in scans if not s.filename.endswith('_MDM')]
+    if not valid_scans:
+        return None
+
+    latest_scan = valid_scans[-1]
 
     temp_dir = tempfile.mkdtemp()
     results = conn.download([latest_scan], temp_dir)
