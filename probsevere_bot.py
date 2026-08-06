@@ -8,6 +8,7 @@ import threading
 from datetime import datetime
 from shapely.geometry import Point, shape, MultiPolygon
 from shapely.affinity import translate
+from radar_generator import generate_radar_image
 
 # keep render awake
 from flask import Flask
