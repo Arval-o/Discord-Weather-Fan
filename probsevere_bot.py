@@ -276,12 +276,12 @@ def bot_loop():
                 if data:
                     process_storms(data)
                     last_processed_url = url
-        else:
-            print(f"[{datetime.now().strftime('%I:%M %p')}] No new update yet. Waiting...")
-    except Exception as e:
-        print(f"Error in main loop: {e}")
+            else:
+                print(f"[{datetime.now().strftime('%I:%M %p')}] No new update yet. Waiting...")
+        except Exception as e:
+            print(f"Error in main loop: {e}")
 
-    time.sleep(120)
+        time.sleep(120)
 
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=bot_loop)
