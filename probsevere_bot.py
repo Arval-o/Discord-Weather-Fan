@@ -245,8 +245,8 @@ def process_storms(data):
         			# Hard cap at 2 hours, as slow storms don't survive that long
     			    if lead_time_exit > 120:
                         lead_time_exit = "120+"
-                    else:
-            			lead_time_enter, lead_time_exit = 0, 0
+                else:
+                    lead_time_enter, lead_time_exit = 0, 0
 
                 previous_alert = state["alerted_storms"].get(storm_id)
                 msg_id = previous_alert.get("message_id") if previous_alert else None
