@@ -2,3 +2,7 @@ feedparser
 requests
 flask
 shapely
+nexradaws
+arm-pyart
+matplotlib
+cartopy
