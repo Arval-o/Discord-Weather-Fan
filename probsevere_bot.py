@@ -33,12 +33,12 @@ HOME_LAT = 34.0622 # 40.615111
 HOME_LON = -81.2140 # -80.096278
 HOME_POINT = Point(HOME_LON, HOME_LAT)
 
-ALERT_BOX = HOME_POINT.buffer(0.25)
+ALERT_BOX = HOME_POINT.buffer(0.072)
 
 HOURS_TO_PROJECT = 1
 
 THRESHOLD_TOR = 15
-THRESHOLD_WIND = 1
+THRESHOLD_WIND = 50
 THRESHOLD_HAIL = 30
 
 def get_latest_probsevere_url():
@@ -125,7 +125,7 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
 
     embed = {
         "title": title,
-        "description": "*Live-tracking active storm core. Updates every ~2 minutes.*\n\n"
+        "description": "*Live tracking, updates every ~2 minutes.*\n\n"
                        f"**Impact Window:** {lead_time_enter} to {lead_time_exit} Minutes from now\n"
                        f"**Storm Motion:** {speed_mph} mph",
         "color": color,
@@ -141,7 +141,7 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
         val = f"`Low-Level Rotation:` {get_rotation_class(llaz)} ({llaz} /s)\n"
         val += f"`Mid-Level Rotation:` {get_rotation_class(mlaz)} ({mlaz} /s)"
         embed["fields"].append({"name": f"🌪️ TORNADO THREAT: {prob_tor}%", "value": val, "inline": False})
-    elif prob_tor > 0:
+    elif prob_tor >= 5:
         minor_threats.append(f"{prob_tor}% chance of a tornado")
 
     if prob_hail >= THRESHOLD_HAIL:
@@ -149,14 +149,14 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
         vil = props.get("VIL", "0")
         val = f"`Max Expected Size:` {mesh} inches\n`VIL Core:` {vil} kg/m²"
         embed["fields"].append({"name": f"🧊 HAIL THREAT: {prob_hail}%", "value": val, "inline": False})
-    elif prob_hail > 0:
+    elif prob_hail > >=10:
         minor_threats.append(f"{prob_hail}% chance of severe hail")
 
     if prob_wind >= THRESHOLD_WIND:
         dcape = props.get("DCAPE", "0")
         val = f"`Downdraft Potential (DCAPE):` {dcape} J/kg"
         embed["fields"].append({"name": f"💨 WIND THREAT: {prob_wind}%", "value": val, "inline": False})
-    elif prob_wind > 0:
+    elif prob_wind > >=15:
         minor_threats.append(f"{prob_wind}% chance of severe wind")
 
     lightning = props.get("FLASH_RATE", "0")
@@ -265,7 +265,7 @@ def bot_loop():
         except Exception as e:
             print(f"Error in main loop: {e}")
 
-        time.sleep(60)
+        time.sleep(120)
 
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=bot_loop)
