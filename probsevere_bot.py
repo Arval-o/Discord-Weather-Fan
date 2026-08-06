@@ -270,7 +270,7 @@ def bot_loop():
 
     while True:
         try:
-        url = get_latest_probsevere_url()
+            url = get_latest_probsevere_url()
             if url and url != last_processed_url:
                 data = fetch_probsevere(url)
                 if data:
