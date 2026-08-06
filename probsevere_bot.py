@@ -27,11 +27,11 @@ def run_server():
 BASE_URL = "https://mrms.ncep.noaa.gov/ProbSevere/PROBSEVERE/"
 STATE_FILE = "probsevere_state.json"
 
-WEBHOOK_URL = os.environ["PROBSEVERE_WEBHOOK_URL"]
+WEBHOOK_URL = os.environ.get("PROBSEVERE_WEBHOOK_URL", "YOUR_DISCORD_WEBHOOK_URL_HERE")
 ROLE_ID = "1485401778962043021"
 
-HOME_LAT = 37.4639 # 40.615111
-HOME_LON = -92.8364 # -80.096278
+HOME_LAT = 37.4639
+HOME_LON = -92.8364
 HOME_POINT = Point(HOME_LON, HOME_LAT)
 
 ALERT_BOX = HOME_POINT.buffer(0.072)
@@ -231,19 +231,19 @@ def process_storms(data):
             if final_threat_area.intersects(ALERT_BOX):
 
                 if speed_deg_per_min > 0:
-        			dist_to_entry = current_footprint.distance(ALERT_BOX)
-        			lead_time_enter = int(dist_to_entry / speed_deg_per_min)
-    
-        			# Dynamically calculate the physical width of this specific storm!
-        			minx, miny, maxx, maxy = current_footprint.bounds
-        			storm_width = max(maxx - minx, maxy - miny)
-    
-        			# 0.072 is the width of your 5-mile Alert Box
-        			dist_to_exit = dist_to_entry + storm_width + 0.072
-        			lead_time_exit = int(dist_to_exit / speed_deg_per_min)
-    
-        			# Hard cap at 2 hours, as slow storms don't survive that long
-    			    if lead_time_exit > 120:
+                    dist_to_entry = current_footprint.distance(ALERT_BOX)
+                    lead_time_enter = int(dist_to_entry / speed_deg_per_min)
+
+                    # Dynamically calculate the physical width of this specific storm!
+                    minx, miny, maxx, maxy = current_footprint.bounds
+                    storm_width = max(maxx - minx, maxy - miny)
+
+                    # 0.072 is the width of your 5-mile Alert Box
+                    dist_to_exit = dist_to_entry + storm_width + 0.072
+                    lead_time_exit = int(dist_to_exit / speed_deg_per_min)
+
+                    # Hard cap at 2 hours, as slow storms don't survive that long
+                    if lead_time_exit > 120:
                         lead_time_exit = "120+"
                 else:
                     lead_time_enter, lead_time_exit = 0, 0
@@ -278,12 +278,12 @@ def bot_loop():
 
     while True:
         try:
-            url = get_latest_probsevere_url()
+        url = get_latest_probsevere_url()
             if url and url != last_processed_url:
                 data = fetch_probsevere(url)
                 if data:
-                    process_storms(data)
-                    last_processed_url = url
+            process_storms(data)
+            last_processed_url = url
             else:
                 print(f"[{datetime.now().strftime('%I:%M %p')}] No new update yet. Waiting...")
         except Exception as e:
