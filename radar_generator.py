@@ -131,7 +131,7 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
                                  min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig)
         except:
         # Fallback if CC not available on this radar
-            display.plot_ppi_map('reflectivity', 1, vmin=-8, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0],max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, projection=ccrs.PlateCarree())
+            display.plot_ppi_map('reflectivity', 1, vmin=-8, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0],max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig)
     else:
         # Wind -> Mid-Level Velocity
         display.plot_ppi_map('velocity', 2, vmin=-40, vmax=40, ax=ax4,
