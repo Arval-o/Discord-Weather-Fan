@@ -97,20 +97,6 @@ def post_to_discord(payload, message_id=None, file_path=None):
         print(f"Error posting to Discord: {e}")
         return None
 
-    try:
-        if message_id:
-            update_url = f"{WEBHOOK_URL}/messages/{message_id}"
-            r = requests.patch(update_url, json=payload)
-            r.raise_for_status()
-            return message_id
-        else:
-            r = requests.post(WEBHOOK_URL + "?wait=true", json=payload)
-            r.raise_for_status()
-            return r.json().get("id")
-    except Exception as e:
-        print(f"Error posting to Discord: {e}")
-        return None
-
 def load_state():
     try:
         with open(STATE_FILE, "r") as f:
@@ -176,14 +162,14 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
         vil = props.get("VIL", "0")
         val = f"`Max Expected Size:` {mesh} inches\n`VIL Core:` {vil} kg/m²"
         embed["fields"].append({"name": f"🧊 HAIL THREAT: {prob_hail}%", "value": val, "inline": False})
-    elif prob_hail > >=10:
+    elif prob_hail >=10:
         minor_threats.append(f"{prob_hail}% chance of severe hail")
 
     if prob_wind >= THRESHOLD_WIND:
         dcape = props.get("DCAPE", "0")
         val = f"`Downdraft Potential (DCAPE):` {dcape} J/kg"
         embed["fields"].append({"name": f"💨 WIND THREAT: {prob_wind}%", "value": val, "inline": False})
-    elif prob_wind > >=15:
+    elif prob_wind >=15:
         minor_threats.append(f"{prob_wind}% chance of severe wind")
 
     lightning = props.get("FLASH_RATE", "0")
