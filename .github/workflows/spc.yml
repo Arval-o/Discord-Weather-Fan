@@ -29,15 +29,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install shapely requests feedparser
 
-      - name: Run bots loop (every 1.5 minutes)
+      - name: Run bots loop (every minute)
         run: |
           for i in {1..18}
           do
             echo "Run #$i"
             python spc_bot.py
             python warnings_bot.py
-            echo "Sleeping for 90 seconds..."
-            sleep 90
+            python probsevere_bot.py
+            echo "Sleeping for 60 seconds..."
+            sleep 60
           done
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
