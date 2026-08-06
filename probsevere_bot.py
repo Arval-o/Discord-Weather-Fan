@@ -37,7 +37,7 @@ ALERT_BOX = HOME_POINT.buffer(0.25)
 HOURS_TO_PROJECT = 1
 
 THRESHOLD_TOR = 15
-THRESHOLD_WIND = 1`
+THRESHOLD_WIND = 1
 THRESHOLD_HAIL = 30
 
 def get_latest_probsevere_url():
@@ -254,11 +254,11 @@ def bot_loop():
     while True:
         try:
             url = get_latest_probsevere_url()
-        if url and url != last_processed_url:
+            if url and url != last_processed_url:
                 data = fetch_probsevere(url)
                 if data:
-            process_storms(data)
-            last_processed_url = url
+                    process_storms(data)
+                    last_processed_url = url
             else:
                 print(f"[{datetime.now().strftime('%I:%M %p')}] No new update yet. Waiting...")
         except Exception as e:
