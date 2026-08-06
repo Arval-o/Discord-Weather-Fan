@@ -3,9 +3,23 @@ import json
 import re
 import math
 import time
+import threading
 from datetime import datetime
 from shapely.geometry import Point, shape, MultiPolygon
 from shapely.affinity import translate
+
+# keep render awake
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def keep_alive():
+    return "ProbSevere Bot is Alive and Tracking!"
+
+def run_server():
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 # config
 BASE_URL = "https://mrms.ncep.noaa.gov/ProbSevere/PROBSEVERE/"
@@ -14,8 +28,8 @@ STATE_FILE = "probsevere_state.json"
 WEBHOOK_URL = os.environ["PROBSEVERE_WEBHOOK_URL"]
 ROLE_ID = "1485401778962043021"
 
-HOME_LAT = 26.35 # 40.615111
-HOME_LON = -81.25 # -80.096278
+HOME_LAT = 40.615111
+HOME_LON = -80.096278
 HOME_POINT = Point(HOME_LON, HOME_LAT)
 
 ALERT_BOX = HOME_POINT.buffer(0.25)
@@ -23,7 +37,7 @@ ALERT_BOX = HOME_POINT.buffer(0.25)
 HOURS_TO_PROJECT = 1
 
 THRESHOLD_TOR = 15
-THRESHOLD_WIND = 1
+THRESHOLD_WIND = 50
 THRESHOLD_HAIL = 30
 
 def get_latest_probsevere_url():
@@ -39,10 +53,8 @@ def get_latest_probsevere_url():
         print(f"Error finding latest data: {e}")
         return None
 
-def fetch_probsevere():
-    url = get_latest_probsevere_url()
-    if not url: return None
-    print(f"Downloading: {url}")
+def fetch_probsevere(url):
+    print(f"[{datetime.now().strftime('%I:%M %p')}] Downloading: {url}")
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         r = requests.get(url, headers=headers, timeout=15)
@@ -59,13 +71,11 @@ def post_to_discord(payload, message_id=None):
 
     try:
         if message_id:
-            # Edit existing message
             update_url = f"{WEBHOOK_URL}/messages/{message_id}"
             r = requests.patch(update_url, json=payload)
             r.raise_for_status()
             return message_id
         else:
-            # Post new message and get ID
             r = requests.post(WEBHOOK_URL + "?wait=true", json=payload)
             r.raise_for_status()
             return r.json().get("id")
@@ -98,25 +108,19 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
     motion_e = float(props.get("MOTION_EAST", 0))
     motion_s = float(props.get("MOTION_SOUTH", 0))
 
-    # Calculate speed in mph
     speed_knots = math.sqrt(motion_e**2 + motion_s**2)
     speed_mph = int(speed_knots * 1.15078)
 
-    # Title
     if prob_severe >= 70:
         title = "SEVERE STORM APPROACHING AREA"
     else:
         title = "POSSIBLE SEVERE STORM APPROACHING AREA"
 
-    color = 0x808080 # Default Gray
-    if prob_tor >= THRESHOLD_TOR:
-        color = 0xFF0000 # Red
-    elif prob_wind >= THRESHOLD_WIND and prob_hail >= THRESHOLD_HAIL:
-        color = 0xFFA500 # Orange
-    elif prob_hail >= THRESHOLD_HAIL:
-        color = 0x00FF00 # Green
-    elif prob_wind >= THRESHOLD_WIND:
-        color = 0x0000FF # Blue
+    color = 0x808080
+    if prob_tor >= THRESHOLD_TOR: color = 0xFF0000
+    elif prob_wind >= THRESHOLD_WIND and prob_hail >= THRESHOLD_HAIL: color = 0xFFA500
+    elif prob_hail >= THRESHOLD_HAIL: color = 0x00FF00
+    elif prob_wind >= THRESHOLD_WIND: color = 0x0000FF
 
     embed = {
         "title": title,
@@ -130,7 +134,6 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
 
     minor_threats = []
 
-    # tornado section
     if prob_tor >= THRESHOLD_TOR:
         llaz = float(props.get("P98LLAZ", 0))
         mlaz = float(props.get("P98MLAZ", 0))
@@ -140,7 +143,6 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
     elif prob_tor > 0:
         minor_threats.append(f"{prob_tor}% chance of a tornado")
 
-    # hail section
     if prob_hail >= THRESHOLD_HAIL:
         mesh = props.get("MESH", "0")
         vil = props.get("VIL", "0")
@@ -149,7 +151,6 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
     elif prob_hail > 0:
         minor_threats.append(f"{prob_hail}% chance of severe hail")
 
-    # wind section
     if prob_wind >= THRESHOLD_WIND:
         dcape = props.get("DCAPE", "0")
         val = f"`Downdraft Potential (DCAPE):` {dcape} J/kg"
@@ -157,7 +158,6 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
     elif prob_wind > 0:
         minor_threats.append(f"{prob_wind}% chance of severe wind")
 
-    # lightning/minor threats
     lightning = props.get("FLASH_RATE", "0")
     minor_text = ""
     if minor_threats:
@@ -178,7 +178,6 @@ def process_storms(data):
     state = load_state()
     current_time = time.time()
 
-    # clean old storms (2+ hrs)
     state["alerted_storms"] = {k: v for k, v in state["alerted_storms"].items()
                                if current_time - v.get("timestamp", 0) < 7200}
 
@@ -204,7 +203,6 @@ def process_storms(data):
             current_footprint = shape(geom)
             current_center = current_footprint.centroid
 
-            # Distance / Speed calculations for Lead Time
             speed_deg_per_hour = math.sqrt(motion_e**2 + motion_s**2) / 60.0
             speed_deg_per_min = speed_deg_per_hour / 60.0
 
@@ -218,7 +216,6 @@ def process_storms(data):
 
             if final_threat_area.intersects(ALERT_BOX):
 
-                # lead time calculation
                 if speed_deg_per_min > 0:
                     dist_to_entry = current_footprint.distance(ALERT_BOX)
                     lead_time_enter = int(dist_to_entry / speed_deg_per_min)
@@ -227,13 +224,12 @@ def process_storms(data):
                 else:
                     lead_time_enter, lead_time_exit = 0, 0
 
-                if lead_time_enter > 40:
+                if lead_time_enter > 30:
                     continue
 
                 previous_alert = state["alerted_storms"].get(storm_id)
                 msg_id = previous_alert.get("message_id") if previous_alert else None
 
-                # generate embed
                 embed = build_discord_embed(props, lead_time_enter, lead_time_exit)
                 payload = {"content": f"<@&{ROLE_ID}>", "embeds": [embed]}
 
@@ -244,19 +240,35 @@ def process_storms(data):
                     print(f"🚨 NEW ALERT for Storm {storm_id}")
                     msg_id = post_to_discord(payload)
 
-                # update state
                 state["alerted_storms"][storm_id] = {
-            "timestamp": current_time,
-            "message_id": msg_id
+                    "timestamp": current_time,
+                    "message_id": msg_id
                 }
 
     save_state(state)
 
-def main():
-    print("Starting ProbSevere Check...")
-    data = fetch_probsevere()
-    if data:
-        process_storms(data)
+def bot_loop():
+    print("Starting Continuous ProbSevere Loop...")
+    last_processed_url = None
+
+    while True:
+        try:
+            url = get_latest_probsevere_url()
+        if url and url != last_processed_url:
+                data = fetch_probsevere(url)
+                if data:
+            process_storms(data)
+            last_processed_url = url
+            else:
+                print(f"[{datetime.now().strftime('%I:%M %p')}] No new update yet. Waiting...")
+        except Exception as e:
+            print(f"Error in main loop: {e}")
+
+        time.sleep(60)
 
 if __name__ == "__main__":
-    main()
+    bot_thread = threading.Thread(target=bot_loop)
+    bot_thread.daemon = True
+    bot_thread.start()
+
+    run_server()
