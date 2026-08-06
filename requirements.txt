@@ -1,5 +1,3 @@
 feedparser
-os
 requests
-base64
 flask
