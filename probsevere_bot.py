@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def keep_alive():
-    return "ProbSevere Bot is Alive and Tracking!"
+    return "ProbSevere Bot up and running"
 
 def run_server():
     import os
@@ -28,8 +28,8 @@ STATE_FILE = "probsevere_state.json"
 WEBHOOK_URL = os.environ["PROBSEVERE_WEBHOOK_URL"]
 ROLE_ID = "1485401778962043021"
 
-HOME_LAT = 40.615111
-HOME_LON = -80.096278
+HOME_LAT = 25.5911 # 40.615111
+HOME_LON = -81.2754 # -80.096278
 HOME_POINT = Point(HOME_LON, HOME_LAT)
 
 ALERT_BOX = HOME_POINT.buffer(0.25)
@@ -37,7 +37,7 @@ ALERT_BOX = HOME_POINT.buffer(0.25)
 HOURS_TO_PROJECT = 1
 
 THRESHOLD_TOR = 15
-THRESHOLD_WIND = 50
+THRESHOLD_WIND = 1`
 THRESHOLD_HAIL = 30
 
 def get_latest_probsevere_url():
