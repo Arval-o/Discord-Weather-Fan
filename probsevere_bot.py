@@ -66,9 +66,35 @@ def fetch_probsevere(url):
         print(f"Error downloading data: {e}")
         return None
 
-def post_to_discord(payload, message_id=None):
+def post_to_discord(payload, message_id=None, file_path=None):
     if WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_URL_HERE":
         print("Webhook URL not set!")
+        return None
+
+    files = None
+    if file_path and os.path.exists(file_path):
+        files = {"file": ("radar.png", open(file_path, "rb"), "image/png")}
+        payload["embeds"][0]["image"] = {"url": "attachment://radar.png"}
+
+    try:
+        if message_id:
+            update_url = f"{WEBHOOK_URL}/messages/{message_id}"
+            if files:
+                r = requests.patch(update_url, files=files, data={"payload_json": json.dumps(payload)})
+            else:
+                r = requests.patch(update_url, json=payload)
+            r.raise_for_status()
+            return message_id
+        else:
+            url = WEBHOOK_URL + "?wait=true"
+            if files:
+                r = requests.post(url, files=files, data={"payload_json": json.dumps(payload)})
+            else:
+                r = requests.post(url, json=payload)
+            r.raise_for_status()
+            return r.json().get("id")
+    except Exception as e:
+        print(f"Error posting to Discord: {e}")
         return None
 
     try:
@@ -235,12 +261,16 @@ def process_storms(data):
                 embed = build_discord_embed(props, lead_time_enter, lead_time_exit)
                 payload = {"content": f"<@&{ROLE_ID}>", "embeds": [embed]}
 
+                # Generate radar matrix
+                print(f"Generating 2x2 Radar Matrix for Storm {storm_id}...")
+                image_path = generate_radar_image(props, geom, "radar.png")
+
                 if msg_id:
                     print(f"Updating existing alert for Storm {storm_id}")
-                    post_to_discord(payload, message_id=msg_id)
+                    post_to_discord(payload, message_id=msg_id, file_path=image_path)
                 else:
                     print(f"🚨 NEW ALERT for Storm {storm_id}")
-                    msg_id = post_to_discord(payload)
+                    msg_id = post_to_discord(payload, file_path=image_path)
 
                 state["alerted_storms"][storm_id] = {
                     "timestamp": current_time,
