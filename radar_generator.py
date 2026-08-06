@@ -72,18 +72,20 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     fig = plt.figure(figsize=(12, 10))
     display = pyart.graph.RadarMapDisplay(radar)
 
+    radar_proj = ccrs.LambertConformal(central_longitude=radar.longitude['data'][0], central_latitude=radar.latitude['data'][0])
+
     # Bounding boxes
     micro_bounds = [lon - 0.3, lon + 0.3, lat - 0.3, lat + 0.3]
     macro_bounds = [lon - 1.0, lon + 1.0, lat - 1.0, lat + 1.0]
 
     # Reflectivity and street map
-    ax1 = fig.add_subplot(221, projection=ccrs.PlateCarree())
+    ax1 = fig.add_subplot(221, projection=radar_proj)
     display.plot_ppi_map('reflectivity', 0, vmin=-8, vmax=64, ax=ax1,
                          cmap='NWSRef',
                          title=f"{radar_id} Base Reflectivity & Path",
                          min_lon=macro_bounds[0], max_lon=macro_bounds[1],
                          min_lat=macro_bounds[2], max_lat=macro_bounds[3],
-                         resolution='50m', fig=fig, projection=ccrs.PlateCarree(), alpha=0.6)
+                         resolution='50m', fig=fig, alpha=0.6)
 
     # Storm polygon
     if storm_geom.get('type') == 'Polygon':
@@ -98,35 +100,35 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
         ax1.plot([lon, lon + me], [lat, lat - ms], color='black', linewidth=4, transform=ccrs.PlateCarree(), zorder=10)
 
     # Reflectivity (zoomed in)
-    ax2 = fig.add_subplot(222, projection=ccrs.PlateCarree())
+    ax2 = fig.add_subplot(222, projection=radar_proj)
     display.plot_ppi_map('reflectivity', 0, vmin=-8, vmax=64, ax=ax2,
                          cmap='NWSRef', title="Core Reflectivity",
                          min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                         min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, projection=ccrs.PlateCarree())
+                         min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig)
 
     # Velocity
-    ax3 = fig.add_subplot(223, projection=ccrs.PlateCarree())
+    ax3 = fig.add_subplot(223, projection=radar_proj)
     display.plot_ppi_map('velocity', 1, vmin=-40, vmax=40, ax=ax3,
                          cmap='NWSVel', title="Core Velocity",
                          min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                         min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, projection=ccrs.PlateCarree())
+                         min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig)
 
     # Dynamic panel
-    ax4 = fig.add_subplot(224, projection=ccrs.PlateCarree())
+    ax4 = fig.add_subplot(224, projection=radar_proj)
 
     if prob_tor >= 15:
         # Tornado -> Spectrum Width (Turbulence/Rotation)
         display.plot_ppi_map('spectrum_width', 1, vmin=0, vmax=15, ax=ax4,
                              cmap='NWS_SPW', title="Spectrum Width (Rotation/Debris)",
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                             min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, projection=ccrs.PlateCarree())
+                             min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig)
     elif prob_hail >= 30:
         # CC
         try:
             display.plot_ppi_map('cross_correlation_ratio', 0, vmin=0.8, vmax=1.05, ax=ax4,
                                  cmap='RefDiff', title="Correlation Coefficient (Hail)",
                                  min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                                 min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, projection=ccrs.PlateCarree())
+                                 min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig)
         except:
         # Fallback if CC not available on this radar
             display.plot_ppi_map('reflectivity', 1, vmin=-8, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0],max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, projection=ccrs.PlateCarree())
@@ -135,7 +137,7 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
         display.plot_ppi_map('velocity', 2, vmin=-40, vmax=40, ax=ax4,
                              cmap='NWSVel', title="Mid-Level Velocity (Wind)",
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                             min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, projection=ccrs.PlateCarree())
+                             min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig)
 
     # Cleanup memory and file
     plt.tight_layout()
