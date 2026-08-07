@@ -75,17 +75,14 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     display = pyart.graph.RadarMapDisplay(radar)
 
     radar_proj = ccrs.LambertConformal(central_longitude=radar.longitude['data'][0], central_latitude=radar.latitude['data'][0])
-
-    # Initialize OpenStreetMap tiles
     osm_tiles = cimgt.OSM()
 
-    # Slightly zoomed out micro bounds (0.3 -> 0.45)
     micro_bounds = [lon - 0.45, lon + 0.45, lat - 0.45, lat + 0.45]
     macro_bounds = [lon - 1.0, lon + 1.0, lat - 1.0, lat + 1.0]
 
     # --- PANEL 1: Macro Reflectivity ---
     ax1 = fig.add_subplot(221, projection=radar_proj)
-    ax1.add_image(osm_tiles, 8) # Load streets underneath
+    ax1.add_image(osm_tiles, 8)
     display.plot_ppi_map('reflectivity', 0, vmin=-8, vmax=64, ax=ax1,
                          cmap='NWSRef',
                          title=f"{radar_id} Base Reflectivity & Path",
@@ -99,29 +96,34 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
         x = [c[0] for c in coords]
         y = [c[1] for c in coords]
 
-        # Magenta actual polygon on macro map
         ax1.plot(x, y, color='magenta', linewidth=3, transform=ccrs.PlateCarree())
 
+        # Dynamic Precision Track Line
         motion_e = float(storm_props.get("MOTION_EAST", 0))
         motion_s = float(storm_props.get("MOTION_SOUTH", 0))
+        speed_kts = math.hypot(motion_e, motion_s)
 
-        lat_radians = math.radians(lat)
-        deg_lat_per_min = -(motion_s / 60.0) / 60.0
-        deg_lon_per_min = (motion_e / 60.0) / math.cos(lat_radians) / 60.0
+        if speed_kts > 10:
+            lat_radians = math.radians(lat)
+            deg_lat_per_min = -(motion_s / 60.0) / 60.0
+            deg_lon_per_min = (motion_e / 60.0) / math.cos(lat_radians) / 60.0
 
-        # Extend thin line 45 minutes into the future
-        end_lon = lon + (deg_lon_per_min * 45)
-        end_lat = lat + (deg_lat_per_min * 45)
-        ax1.plot([lon, end_lon], [lat, end_lat], color='black', linewidth=2, transform=ccrs.PlateCarree(), zorder=10)
+            dist_deg_per_min = math.hypot(deg_lon_per_min, deg_lat_per_min)
 
-        # Add exact X markers at 10, 20, and 30 minutes!
-        for m in [10, 20, 30]:
-            x_m = lon + (deg_lon_per_min * m)
-            y_m = lat + (deg_lat_per_min * m)
-            ax1.plot(x_m, y_m, marker='x', color='black', markersize=8, markeredgewidth=2, transform=ccrs.PlateCarree(), zorder=11)
-            ax1.text(x_m, y_m + 0.02, f"{m}m", color='black', fontsize=9, fontweight='bold', transform=ccrs.PlateCarree(), zorder=12)
+            fixed_length_deg = 0.5
+            total_mins = fixed_length_deg / dist_deg_per_min
 
-        # Get exact bounding box of the storm for the warning rectangles
+            end_lon = lon + (deg_lon_per_min * total_mins)
+            end_lat = lat + (deg_lat_per_min * total_mins)
+            ax1.plot([lon, end_lon], [lat, end_lat], color='black', linewidth=2, transform=ccrs.PlateCarree(), zorder=10)
+
+            for frac in [0.33, 0.66, 1.0]:
+                m_mins = total_mins * frac
+                x_m = lon + (deg_lon_per_min * m_mins)
+                y_m = lat + (deg_lat_per_min * m_mins)
+                ax1.plot(x_m, y_m, marker='x', color='black', markersize=7, markeredgewidth=2, transform=ccrs.PlateCarree(), zorder=11)
+                ax1.text(x_m, y_m + 0.02, f"{int(m_mins)}m", color='black', fontsize=9, fontweight='bold', transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.5, edgecolor='none', pad=2))
+
         minx, miny = min(x), min(y)
         maxx, maxy = max(x), max(y)
 
@@ -157,21 +159,20 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
                                  min_lon=micro_bounds[0], max_lon=micro_bounds[1],
                                  min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
         except:
-            display.plot_ppi_map('reflectivity', 1, vmin=-8, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0], max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
+            display.plot_ppi_map('reflectivity', 1, vmin=-8, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0],max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
     else:
         display.plot_ppi_map('velocity', 1, vmin=-40, vmax=40, ax=ax4,
                              cmap='NWSVel', title="Mid-Level Velocity (Wind)",
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
                              min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
 
+    # Draw the Red Warning Rectangles around the core!
     if storm_geom.get('type') == 'Polygon':
         storm_id = storm_props.get("ID", "Unknown")
         for ax in [ax2, ax3, ax4]:
-            # Draw the red box
-            ax.plot([minx, maxx, maxx, minx, minx], [miny, miny, maxy, maxy, miny], color='white', linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
-            # Pin the Storm Object ID to the top-left corner of the box
-            ax.text(minx, maxy + 0.02, f"Storm Object {storm_id}", color='black', fontsize=10, fontweight='bold',
-            transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=2))
+            ax.plot([minx, maxx, maxx, minx, minx], [miny, miny, maxy, maxy, miny], color='red', linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
+            ax.text(minx, maxy + 0.02, f"Storm Object {storm_id}", color='red', fontsize=10, fontweight='bold',
+            transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=4))
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=120, bbox_inches='tight')
