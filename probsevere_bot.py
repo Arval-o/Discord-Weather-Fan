@@ -245,7 +245,7 @@ def process_storms(data):
                 previous_alert = state["alerted_storms"].get(storm_id)
                 msg_id = previous_alert.get("message_id") if previous_alert else None
 
-                embed = build_discord_embed(props, lead_time_enter, lead_time_exit)
+                embed = build_discord_embed(props, impact_text)
                 payload = {"content": f"<@&{ROLE_ID}>", "embeds": [embed]}
 
                 # Generate radar matrix
