@@ -4,24 +4,10 @@ import json
 import re
 import math
 import time
-import threading
 from datetime import datetime, timedelta
 from shapely.geometry import Point, shape, MultiPolygon
 from shapely.affinity import translate
 from radar_generator import generate_radar_image
-
-# keep render awake
-from flask import Flask
-app = Flask(__name__)
-
-@app.route('/')
-def keep_alive():
-    return "ProbSevere Bot up and running"
-
-def run_server():
-    import os
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
 
 # config
 BASE_URL = "https://mrms.ncep.noaa.gov/ProbSevere/PROBSEVERE/"
@@ -70,12 +56,12 @@ def post_to_discord(payload, message_id=None, file_path=None):
     if WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_URL_HERE":
         print("Webhook URL not set!")
         return None
-    
+
     files = None
     if file_path and os.path.exists(file_path):
         files = {"file": ("radar.png", open(file_path, "rb"), "image/png")}
         payload["embeds"][0]["image"] = {"url": "attachment://radar.png"}
-    
+
     try:
         if message_id:
             update_url = f"{WEBHOOK_URL}/messages/{message_id}"
@@ -232,17 +218,16 @@ def process_storms(data):
 
             if final_threat_area.intersects(ALERT_BOX):
 
-
                 if speed_deg_per_min > 0:
-    			    dist_to_entry = current_footprint.distance(ALERT_BOX)
-    			    eta_mins = int(dist_to_entry / speed_deg_per_min)
+                    dist_to_entry = current_footprint.distance(ALERT_BOX)
+                    eta_mins = int(dist_to_entry / speed_deg_per_min)
 
-    			    if eta_mins == 0:
+                    if eta_mins == 0:
                         impact_text = "Currently impacting area"
-    			    else:
+                    else:
                         impact_text = f"Entering area in ~{eta_mins} minutes"
                 else:
-    			    impact_text = "Unknown (stationary)"
+                    impact_text = "Unknown (stationary)"
 
                 previous_alert = state["alerted_storms"].get(storm_id)
                 msg_id = previous_alert.get("message_id") if previous_alert else None
@@ -278,8 +263,8 @@ def bot_loop():
             if url and url != last_processed_url:
                 data = fetch_probsevere(url)
                 if data:
-                    process_storms(data)
-                    last_processed_url = url
+            process_storms(data)
+            last_processed_url = url
             else:
                 print(f"[{(datetime.utcnow() - timedelta(hours=4)).strftime('%I:%M %p')}] No new update yet. Waiting...")
         except Exception as e:
@@ -288,8 +273,4 @@ def bot_loop():
         time.sleep(60)
 
 if __name__ == "__main__":
-    bot_thread = threading.Thread(target=bot_loop)
-    bot_thread.daemon = True
-    bot_thread.start()
-
-    run_server()
+    bot_loop()
