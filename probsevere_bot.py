@@ -30,8 +30,8 @@ STATE_FILE = "probsevere_state.json"
 WEBHOOK_URL = os.environ.get("PROBSEVERE_WEBHOOK_URL", "YOUR_DISCORD_WEBHOOK_URL_HERE")
 ROLE_ID = "1485401778962043021"
 
-HOME_LAT = 49.7042
-HOME_LON = -92.9203
+HOME_LAT = 36.5121
+HOME_LON = -102.5069
 HOME_POINT = Point(HOME_LON, HOME_LAT)
 
 ALERT_BOX = HOME_POINT.buffer(0.072)
@@ -56,7 +56,7 @@ def get_latest_probsevere_url():
         return None
 
 def fetch_probsevere(url):
-    print(f"[{datetime.now().strftime('%I:%M %p')}] Downloading: {url}")
+    print(f"[{(datetime.utcnow() - timedelta(hours=4)).strftime('%I:%M %p')}] Downloading: {url}")
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         r = requests.get(url, headers=headers, timeout=15)
@@ -143,7 +143,7 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
                        f"**Storm Motion:** {speed_mph} mph",
         "color": color,
         "fields": [],
-        "footer": {"text": f"Last updated: {datetime.now().strftime('%I:%M %p EST')}"}
+        "footer": {"text": f"Last updated: {(datetime.utcnow() - timedelta(hours=4)).strftime('%I:%M %p EST')}"}
     }
 
     minor_threats = []
@@ -279,7 +279,7 @@ def bot_loop():
                     process_storms(data)
                     last_processed_url = url
             else:
-                print(f"[{datetime.now().strftime('%I:%M %p')}] No new update yet. Waiting...")
+                print(f"[{(datetime.utcnow() - timedelta(hours=4)).strftime('%I:%M %p')}] No new update yet. Waiting...")
         except Exception as e:
             print(f"Error in main loop: {e}")
 
