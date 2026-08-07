@@ -91,9 +91,9 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     deg_lon_per_min = (motion_e / 60.0) / math.cos(lat_radians) / 60.0
     dist_deg_per_min = math.hypot(deg_lon_per_min, deg_lat_per_min)
 
-    # Dynamic Bounds: 60 minutes will be exactly halfway to the edge!
-    pad_ahead = max(1.0, dist_deg_per_min * 120.0)
-    pad_behind = 0.5
+    # Tighter Bounds: Zoom in significantly so the arrow looks large!
+    pad_ahead = max(0.5, dist_deg_per_min * 85.0)
+    pad_behind = 0.3
 
     lon_min, lon_max = lon - 1.0, lon + 1.0
     lat_min, lat_max = lat - 1.0, lat + 1.0
@@ -113,44 +113,43 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     ax1.set_extent(macro_bounds, crs=ccrs.PlateCarree())
     ax1.add_image(osm_tiles, 8)
 
-    # OPACITY LOWERED TO 0.25 TO REVEAL THE MAP!
-    display.plot_ppi_map('reflectivity', 0, vmin=10, vmax=64, ax=ax1,
+    # vmin set to 25 to completely delete clear-air dust!
+    display.plot_ppi_map('reflectivity', 0, vmin=25, vmax=64, ax=ax1,
                          cmap='NWSRef',
                          title=f"{radar_id} Base Reflectivity & Path",
                          min_lon=macro_bounds[0], max_lon=macro_bounds[1],
                          min_lat=macro_bounds[2], max_lat=macro_bounds[3],
-                         resolution='50m', fig=fig, alpha=0.25)
+                         resolution='50m', fig=fig, alpha=0.35)
 
     if storm_geom.get('type') == 'Polygon':
         coords = storm_geom['coordinates'][0]
         x = [c[0] for c in coords]
         y = [c[1] for c in coords]
 
-        # White Storm Polygon (zorder=10 so arrow goes over it)
+        # White Storm Polygon
         ax1.plot(x, y, color='white', linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
 
         minx, miny = min(x), min(y)
         maxx, maxy = max(x), max(y)
 
         if speed_kts > 5:
-            # Draw Sleek Black Arrow to 65m so arrowhead clears the 60m label!
-            arrow_mins = 65.0
+            # Stretch Arrow to 75 minutes so it clearly passes the 60m label!
+            arrow_mins = 75.0
             end_lon = lon + (deg_lon_per_min * arrow_mins)
             end_lat = lat + (deg_lat_per_min * arrow_mins)
 
-            # zorder=20 forces arrow on top of everything
             ax1.annotate("", xy=(end_lon, end_lat), xytext=(lon, lat),
                          arrowprops=dict(arrowstyle="-|>", color='black', lw=1.5, mutation_scale=15),
                          transform=ccrs.PlateCarree(), zorder=20)
 
-            # Smart Dynamic Labels (Thinner Xs)
+            # Labels (smaller text)
             labels = [30, 60] if (30 * dist_deg_per_min) > 0.15 else [60]
 
             for m in labels:
                 x_m = lon + (deg_lon_per_min * m)
                 y_m = lat + (deg_lat_per_min * m)
                 ax1.plot(x_m, y_m, marker='x', color='black', markersize=6, markeredgewidth=1.5, transform=ccrs.PlateCarree(), zorder=21)
-                ax1.text(x_m, y_m + (pad_ahead * 0.015), f"{int(m)}m", color='black', fontsize=9, fontweight='bold', transform=ccrs.PlateCarree(), zorder=22, bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2))
+                ax1.text(x_m, y_m + 0.015, f"{int(m)}m", color='black', fontsize=7, fontweight='bold', transform=ccrs.PlateCarree(), zorder=22, bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2))
 
     # --- PANEL 2: Micro Reflectivity ---
     ax2 = fig.add_subplot(222, projection=radar_proj)
@@ -194,13 +193,13 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
                              min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
 
-    # Draw the White Warning Rectangles ONLY on the 3 Micro Maps!
+    # Draw Translucent Rectangles ONLY on the 3 Micro Maps
     if storm_geom.get('type') == 'Polygon':
         storm_id = storm_props.get("ID", "Unknown")
         for ax in [ax2, ax3, ax4]:
-            ax.plot([minx, maxx, maxx, minx, minx], [miny, miny, maxy, maxy, miny], color='white', linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
+            # alpha=0.6 makes the box translucent!
+            ax.plot([minx, maxx, maxx, minx, minx], [miny, miny, maxy, maxy, miny], color='white', alpha=0.6, linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
 
-            # Label size dropped to 8!
             ax.text(minx, maxy + 0.02, f"Storm Object {storm_id}", color='black', fontsize=8, fontweight='bold',
             transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.9, edgecolor='none', pad=4))
 
