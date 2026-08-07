@@ -70,17 +70,18 @@ def post_to_discord(payload, message_id=None, file_path=None):
     if WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_URL_HERE":
         print("Webhook URL not set!")
         return None
-
+    
     files = None
     if file_path and os.path.exists(file_path):
         files = {"file": ("radar.png", open(file_path, "rb"), "image/png")}
         payload["embeds"][0]["image"] = {"url": "attachment://radar.png"}
-        payload["attachments"] = [{"id": 0, "filename": "radar.png"}]
-
+    
     try:
         if message_id:
             update_url = f"{WEBHOOK_URL}/messages/{message_id}"
             if files:
+                # ONLY inject the attachments override when updating to prevent gallery buildup!
+                payload["attachments"] = [{"id": 0, "filename": "radar.png"}]
                 r = requests.patch(update_url, files=files, data={"payload_json": json.dumps(payload)})
             else:
                 r = requests.patch(update_url, json=payload)
