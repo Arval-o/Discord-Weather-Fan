@@ -114,7 +114,7 @@ def get_rotation_class(az_shear):
     elif az_shear >= 0.005: return "🟡 MODERATE"
     else: return "🔵 WEAK"
 
-def build_discord_embed(props, lead_time_enter, lead_time_exit):
+def build_discord_embed(props, impact_text):
     prob_severe = int(props.get("ProbSevere", 0))
     prob_tor = int(props.get("ProbTor", 0))
     prob_wind = int(props.get("ProbWind", 0))
@@ -139,7 +139,7 @@ def build_discord_embed(props, lead_time_enter, lead_time_exit):
     embed = {
         "title": title,
         "description": "*Live tracking, updates every ~2 minutes.*\n\n"
-                       f"**Impact Window:** {lead_time_enter} to {lead_time_exit} Minutes from now\n"
+                       f"**Impact Window:** {impact_text} minutes from now\n"
                        f"**Storm Motion:** {speed_mph} mph",
         "color": color,
         "fields": [],
