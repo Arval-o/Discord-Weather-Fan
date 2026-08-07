@@ -10,6 +10,11 @@ from datetime import datetime
 import tempfile
 from shapely.geometry import shape
 
+class GoogleRoadmap(cimgt.OSM):
+    def _image_url(self, tile):
+        x, y, z = tile
+        return f'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
+
 def get_closest_radar(lat, lon):
     try:
         r = requests.get('https://api.weather.gov/radar/stations', timeout=10)
@@ -75,7 +80,7 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     display = pyart.graph.RadarMapDisplay(radar)
 
     radar_proj = ccrs.LambertConformal(central_longitude=radar.longitude['data'][0], central_latitude=radar.latitude['data'][0])
-    osm_tiles = cimgt.OSM()
+    osm_tiles = GoogleRoadmap()
 
     motion_e = float(storm_props.get("MOTION_EAST", 0))
     motion_s = float(storm_props.get("MOTION_SOUTH", 0))
