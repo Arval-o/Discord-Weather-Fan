@@ -38,9 +38,9 @@ ALERT_BOX = HOME_POINT.buffer(0.072)
 
 HOURS_TO_PROJECT = 1
 
-THRESHOLD_TOR = 15
-THRESHOLD_WIND = 50
-THRESHOLD_HAIL = 30
+THRESHOLD_TOR = 1
+THRESHOLD_WIND = 5
+THRESHOLD_HAIL = 3
 
 def get_latest_probsevere_url():
     headers = {"User-Agent": "Mozilla/5.0"}
