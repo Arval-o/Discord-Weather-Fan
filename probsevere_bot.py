@@ -230,15 +230,17 @@ def process_storms(data):
 
             if final_threat_area.intersects(ALERT_BOX):
 
+
                 if speed_deg_per_min > 0:
     			    dist_to_entry = current_footprint.distance(ALERT_BOX)
-    			    lead_time_enter = int(dist_to_entry / speed_deg_per_min)
+    			    eta_mins = int(dist_to_entry / speed_deg_per_min)
 
-    			    # 0.144 is the full 10-mile diameter of your Alert Box
-    			    dist_to_exit = dist_to_entry + 0.144
-    			    lead_time_exit = int(dist_to_exit / speed_deg_per_min)
+    			    if eta_mins == 0:
+                        impact_text = "Currently Impacting Area!"
+    			    else:
+                        impact_text = f"Entering area in ~{eta_mins} Minutes"
                 else:
-    			    lead_time_enter, lead_time_exit = 0, 0
+    			    impact_text = "Unknown (Stationary)"
 
                 previous_alert = state["alerted_storms"].get(storm_id)
                 msg_id = previous_alert.get("message_id") if previous_alert else None
