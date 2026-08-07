@@ -172,13 +172,12 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
                              min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
     elif prob_hail >= 30:
         try:
-        display.plot_ppi_map('cross_correlation_ratio', 0, vmin=0.8, vmax=1.05, ax=ax4,
+            display.plot_ppi_map('cross_correlation_ratio', 0, vmin=0.8, vmax=1.05, ax=ax4,
                                  cmap='RefDiff', title="Correlation Coefficient (Hail)",
                                  min_lon=micro_bounds[0], max_lon=micro_bounds[1],
                                  min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
         except:
-            display.plot_ppi_map('reflectivity', 1, vmin=10, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0],max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3],
-resolution='50m', fig=fig, alpha=0.8)
+            display.plot_ppi_map('reflectivity', 1, vmin=10, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0],max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
     else:
         display.plot_ppi_map('velocity', 1, vmin=-40, vmax=40, ax=ax4,
                              cmap='NWSVel', title="Mid-Level Velocity (Wind)",
