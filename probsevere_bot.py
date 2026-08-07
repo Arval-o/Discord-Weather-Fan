@@ -81,7 +81,7 @@ def post_to_discord(payload, message_id=None, file_path=None):
             update_url = f"{WEBHOOK_URL}/messages/{message_id}"
             if files:
                 # ONLY inject the attachments override when updating to prevent gallery buildup!
-                payload["attachments"] = [{"id": 0, "filename": "radar.png"}]
+                payload["attachments"] = []
                 r = requests.patch(update_url, files=files, data={"payload_json": json.dumps(payload)})
             else:
                 r = requests.patch(update_url, json=payload)
