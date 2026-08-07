@@ -86,15 +86,24 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     motion_s = float(storm_props.get("MOTION_SOUTH", 0))
     speed_kts = math.hypot(motion_e, motion_s)
 
+    lat_radians = math.radians(lat)
+    deg_lat_per_min = -(motion_s / 60.0) / 60.0
+    deg_lon_per_min = (motion_e / 60.0) / math.cos(lat_radians) / 60.0
+    dist_deg_per_min = math.hypot(deg_lon_per_min, deg_lat_per_min)
+
+    # Dynamic Bounds: 60 minutes will be exactly halfway to the edge!
+    pad_ahead = max(1.0, dist_deg_per_min * 120.0)
+    pad_behind = 0.5
+
     lon_min, lon_max = lon - 1.0, lon + 1.0
     lat_min, lat_max = lat - 1.0, lat + 1.0
 
     if speed_kts > 5:
-        if motion_e > 0:   lon_min, lon_max = lon - 0.5, lon + 1.5
-        elif motion_e < 0: lon_min, lon_max = lon - 1.5, lon + 0.5
+        if motion_e > 0:   lon_min, lon_max = lon - pad_behind, lon + pad_ahead
+        elif motion_e < 0: lon_min, lon_max = lon - pad_ahead, lon + pad_behind
 
-        if motion_s > 0:   lat_min, lat_max = lat - 1.5, lat + 0.5
-        elif motion_s < 0: lat_min, lat_max = lat - 0.5, lat + 1.5
+        if motion_s > 0:   lat_min, lat_max = lat - pad_ahead, lat + pad_behind
+        elif motion_s < 0: lat_min, lat_max = lat - pad_behind, lat + pad_ahead
 
     macro_bounds = [lon_min, lon_max, lat_min, lat_max]
     micro_bounds = [lon - 0.45, lon + 0.45, lat - 0.45, lat + 0.45]
@@ -104,75 +113,44 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     ax1.set_extent(macro_bounds, crs=ccrs.PlateCarree())
     ax1.add_image(osm_tiles, 8)
 
-    # OPACITY LOWERED TO 0.4 TO REVEAL THE MAP!
+    # OPACITY LOWERED TO 0.25 TO REVEAL THE MAP!
     display.plot_ppi_map('reflectivity', 0, vmin=10, vmax=64, ax=ax1,
                          cmap='NWSRef',
                          title=f"{radar_id} Base Reflectivity & Path",
                          min_lon=macro_bounds[0], max_lon=macro_bounds[1],
                          min_lat=macro_bounds[2], max_lat=macro_bounds[3],
-                         resolution='50m', fig=fig, alpha=0.4)
+                         resolution='50m', fig=fig, alpha=0.25)
 
     if storm_geom.get('type') == 'Polygon':
         coords = storm_geom['coordinates'][0]
         x = [c[0] for c in coords]
         y = [c[1] for c in coords]
 
-        # White Storm Polygon
-        ax1.plot(x, y, color='white', linewidth=3, transform=ccrs.PlateCarree())
+        # White Storm Polygon (zorder=10 so arrow goes over it)
+        ax1.plot(x, y, color='white', linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
 
         minx, miny = min(x), min(y)
         maxx, maxy = max(x), max(y)
 
         if speed_kts > 5:
-            lat_radians = math.radians(lat)
-            deg_lat_per_min = -(motion_s / 60.0) / 60.0
-            deg_lon_per_min = (motion_e / 60.0) / math.cos(lat_radians) / 60.0
+            # Draw Sleek Black Arrow to 65m so arrowhead clears the 60m label!
+            arrow_mins = 65.0
+            end_lon = lon + (deg_lon_per_min * arrow_mins)
+            end_lat = lat + (deg_lat_per_min * arrow_mins)
 
-            # Calculate intersection with screen bounds
-            bx_min = lon_min + 0.05
-            bx_max = lon_max - 0.05
-            by_min = lat_min + 0.05
-            by_max = lat_max - 0.05
-
-            t_candidates = []
-            if deg_lon_per_min > 0: t_candidates.append((bx_max - lon) / deg_lon_per_min)
-            elif deg_lon_per_min < 0: t_candidates.append((bx_min - lon) / deg_lon_per_min)
-
-            if deg_lat_per_min > 0: t_candidates.append((by_max - lat) / deg_lat_per_min)
-            elif deg_lat_per_min < 0: t_candidates.append((by_min - lat) / deg_lat_per_min)
-
-            valid_t = [t for t in t_candidates if t > 0]
-            edge_mins = min(valid_t) if valid_t else 60
-
-            # Cap at 60 minutes or screen edge
-            max_mins = min(60.0, edge_mins)
-
-            end_lon = lon + (deg_lon_per_min * max_mins)
-            end_lat = lat + (deg_lat_per_min * max_mins)
-
-            # Draw Stylized Black Arrow
+            # zorder=20 forces arrow on top of everything
             ax1.annotate("", xy=(end_lon, end_lat), xytext=(lon, lat),
-                         arrowprops=dict(arrowstyle="-|>", color='black', lw=3, mutation_scale=20),
-                         transform=ccrs.PlateCarree(), zorder=10)
+                         arrowprops=dict(arrowstyle="-|>", color='black', lw=1.5, mutation_scale=15),
+                         transform=ccrs.PlateCarree(), zorder=20)
 
-            dist_deg_per_min = math.hypot(deg_lon_per_min, deg_lat_per_min)
-
-            # Smart Dynamic Labels
-            labels = []
-            if max_mins >= 59.9:
-                dist_30_60 = 30 * dist_deg_per_min
-                if dist_30_60 > 0.15: # Prevents 30m and 60m from overlapping if slow
-                    labels = [30, 60]
-                else:
-                    labels = [60]
-            else:
-                labels = [max_mins/3, 2*max_mins/3, max_mins]
+            # Smart Dynamic Labels (Thinner Xs)
+            labels = [30, 60] if (30 * dist_deg_per_min) > 0.15 else [60]
 
             for m in labels:
                 x_m = lon + (deg_lon_per_min * m)
                 y_m = lat + (deg_lat_per_min * m)
-                ax1.plot(x_m, y_m, marker='o', color='black', markersize=5, transform=ccrs.PlateCarree(), zorder=11)
-                ax1.text(x_m, y_m + 0.02, f"{int(m)}m", color='black', fontsize=10, fontweight='bold', transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2))
+                ax1.plot(x_m, y_m, marker='x', color='black', markersize=6, markeredgewidth=1.5, transform=ccrs.PlateCarree(), zorder=21)
+                ax1.text(x_m, y_m + (pad_ahead * 0.015), f"{int(m)}m", color='black', fontsize=9, fontweight='bold', transform=ccrs.PlateCarree(), zorder=22, bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2))
 
     # --- PANEL 2: Micro Reflectivity ---
     ax2 = fig.add_subplot(222, projection=radar_proj)
@@ -216,12 +194,14 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
                              min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
 
-    # Draw the White Warning Rectangles on ALL 4 PANELS!
+    # Draw the White Warning Rectangles ONLY on the 3 Micro Maps!
     if storm_geom.get('type') == 'Polygon':
         storm_id = storm_props.get("ID", "Unknown")
-        for ax in [ax1, ax2, ax3, ax4]: # Added ax1 to get the box on the macro map too!
+        for ax in [ax2, ax3, ax4]:
             ax.plot([minx, maxx, maxx, minx, minx], [miny, miny, maxy, maxy, miny], color='white', linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
-            ax.text(minx, maxy + 0.02, f"Storm Object {storm_id}", color='black', fontsize=10, fontweight='bold',
+
+            # Label size dropped to 8!
+            ax.text(minx, maxy + 0.02, f"Storm Object {storm_id}", color='black', fontsize=8, fontweight='bold',
             transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.9, edgecolor='none', pad=4))
 
     plt.tight_layout()
