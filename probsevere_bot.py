@@ -141,7 +141,7 @@ def build_discord_embed(props, impact_text):
     embed = {
         "title": title,
         "description": "*Live tracking, updates every ~2 minutes.*\n\n"
-                       f"**Impact Window:** {impact_text} minutes from now\n"
+                       f"**Impact Window:** {impact_text}\n"
                        f"**Storm Motion:** {speed_mph} mph",
         "color": color,
         "fields": [],
@@ -238,11 +238,11 @@ def process_storms(data):
     			    eta_mins = int(dist_to_entry / speed_deg_per_min)
 
     			    if eta_mins == 0:
-                        impact_text = "Currently Impacting Area!"
+                        impact_text = "Currently impacting area"
     			    else:
-                        impact_text = f"Entering area in ~{eta_mins} Minutes"
+                        impact_text = f"Entering area in ~{eta_mins} minutes"
                 else:
-    			    impact_text = "Unknown (Stationary)"
+    			    impact_text = "Unknown (stationary)"
 
                 previous_alert = state["alerted_storms"].get(storm_id)
                 msg_id = previous_alert.get("message_id") if previous_alert else None
