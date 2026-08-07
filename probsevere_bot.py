@@ -75,6 +75,7 @@ def post_to_discord(payload, message_id=None, file_path=None):
     if file_path and os.path.exists(file_path):
         files = {"file": ("radar.png", open(file_path, "rb"), "image/png")}
         payload["embeds"][0]["image"] = {"url": "attachment://radar.png"}
+        payload["attachments"] = [{"id": 0, "filename": "radar.png"}]
 
     try:
         if message_id:
