@@ -285,7 +285,7 @@ def bot_loop():
         except Exception as e:
             print(f"Error in main loop: {e}")
 
-        time.sleep(120)
+        time.sleep(60)
 
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=bot_loop)
