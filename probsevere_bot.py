@@ -263,8 +263,8 @@ def bot_loop():
             if url and url != last_processed_url:
                 data = fetch_probsevere(url)
                 if data:
-            process_storms(data)
-            last_processed_url = url
+                    process_storms(data)
+                    last_processed_url = url
             else:
                 print(f"[{(datetime.utcnow() - timedelta(hours=4)).strftime('%I:%M %p')}] No new update yet. Waiting...")
         except Exception as e:
