@@ -89,7 +89,6 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     lon_min, lon_max = lon - 1.0, lon + 1.0
     lat_min, lat_max = lat - 1.0, lat + 1.0
 
-    # Camera shift threshold dropped to 5 knots!
     if speed_kts > 5:
         if motion_e > 0:   lon_min, lon_max = lon - 0.5, lon + 1.5
         elif motion_e < 0: lon_min, lon_max = lon - 1.5, lon + 0.5
@@ -102,50 +101,83 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
 
     # --- PANEL 1: Macro Reflectivity ---
     ax1 = fig.add_subplot(221, projection=radar_proj)
-    ax1.set_extent(macro_bounds, crs=ccrs.PlateCarree()) # Fix Cartopy Bug
+    ax1.set_extent(macro_bounds, crs=ccrs.PlateCarree())
     ax1.add_image(osm_tiles, 8)
-    # vmin bumped to 10 to hide clear-air radar noise
+
+    # OPACITY LOWERED TO 0.4 TO REVEAL THE MAP!
     display.plot_ppi_map('reflectivity', 0, vmin=10, vmax=64, ax=ax1,
                          cmap='NWSRef',
                          title=f"{radar_id} Base Reflectivity & Path",
                          min_lon=macro_bounds[0], max_lon=macro_bounds[1],
                          min_lat=macro_bounds[2], max_lat=macro_bounds[3],
-                         resolution='50m', fig=fig, alpha=0.7)
+                         resolution='50m', fig=fig, alpha=0.4)
 
     if storm_geom.get('type') == 'Polygon':
         coords = storm_geom['coordinates'][0]
         x = [c[0] for c in coords]
         y = [c[1] for c in coords]
+
+        # White Storm Polygon
         ax1.plot(x, y, color='white', linewidth=3, transform=ccrs.PlateCarree())
-
-        if speed_kts > 5: # Match the 5 knot threshold
-            lat_radians = math.radians(lat)
-            deg_lat_per_min = -(motion_s / 60.0) / 60.0
-            deg_lon_per_min = (motion_e / 60.0) / math.cos(lat_radians) / 60.0
-
-            dist_deg_per_min = math.hypot(deg_lon_per_min, deg_lat_per_min)
-            fixed_length_deg = 0.5
-            total_mins = fixed_length_deg / dist_deg_per_min
-
-            end_lon = lon + (deg_lon_per_min * total_mins)
-            end_lat = lat + (deg_lat_per_min * total_mins)
-            ax1.plot([lon, end_lon], [lat, end_lat], color='white', linewidth=2, transform=ccrs.PlateCarree(), zorder=10)
-
-            for frac in [0.33, 0.66, 1.0]:
-                m_mins = total_mins * frac
-                x_m = lon + (deg_lon_per_min * m_mins)
-                y_m = lat + (deg_lat_per_min * m_mins)
-                ax1.plot(x_m, y_m, marker='x', color='white', markersize=7, markeredgewidth=2, transform=ccrs.PlateCarree(), zorder=11)
-                ax1.text(x_m, y_m + 0.02, f"{int(m_mins)}m", color='black', fontsize=9, fontweight='bold', transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.5, edgecolor='none', pad=2))
 
         minx, miny = min(x), min(y)
         maxx, maxy = max(x), max(y)
 
+        if speed_kts > 5:
+            lat_radians = math.radians(lat)
+            deg_lat_per_min = -(motion_s / 60.0) / 60.0
+            deg_lon_per_min = (motion_e / 60.0) / math.cos(lat_radians) / 60.0
+
+            # Calculate intersection with screen bounds
+            bx_min = lon_min + 0.05
+            bx_max = lon_max - 0.05
+            by_min = lat_min + 0.05
+            by_max = lat_max - 0.05
+
+            t_candidates = []
+            if deg_lon_per_min > 0: t_candidates.append((bx_max - lon) / deg_lon_per_min)
+            elif deg_lon_per_min < 0: t_candidates.append((bx_min - lon) / deg_lon_per_min)
+
+            if deg_lat_per_min > 0: t_candidates.append((by_max - lat) / deg_lat_per_min)
+            elif deg_lat_per_min < 0: t_candidates.append((by_min - lat) / deg_lat_per_min)
+
+            valid_t = [t for t in t_candidates if t > 0]
+            edge_mins = min(valid_t) if valid_t else 60
+
+            # Cap at 60 minutes or screen edge
+            max_mins = min(60.0, edge_mins)
+
+            end_lon = lon + (deg_lon_per_min * max_mins)
+            end_lat = lat + (deg_lat_per_min * max_mins)
+
+            # Draw Stylized Black Arrow
+            ax1.annotate("", xy=(end_lon, end_lat), xytext=(lon, lat),
+                         arrowprops=dict(arrowstyle="-|>", color='black', lw=3, mutation_scale=20),
+                         transform=ccrs.PlateCarree(), zorder=10)
+
+            dist_deg_per_min = math.hypot(deg_lon_per_min, deg_lat_per_min)
+
+            # Smart Dynamic Labels
+            labels = []
+            if max_mins >= 59.9:
+                dist_30_60 = 30 * dist_deg_per_min
+                if dist_30_60 > 0.15: # Prevents 30m and 60m from overlapping if slow
+                    labels = [30, 60]
+                else:
+                    labels = [60]
+            else:
+                labels = [max_mins/3, 2*max_mins/3, max_mins]
+
+            for m in labels:
+                x_m = lon + (deg_lon_per_min * m)
+                y_m = lat + (deg_lat_per_min * m)
+                ax1.plot(x_m, y_m, marker='o', color='black', markersize=5, transform=ccrs.PlateCarree(), zorder=11)
+                ax1.text(x_m, y_m + 0.02, f"{int(m)}m", color='black', fontsize=10, fontweight='bold', transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2))
+
     # --- PANEL 2: Micro Reflectivity ---
     ax2 = fig.add_subplot(222, projection=radar_proj)
-    ax2.set_extent(micro_bounds, crs=ccrs.PlateCarree()) # Fix Cartopy Bug
+    ax2.set_extent(micro_bounds, crs=ccrs.PlateCarree())
     ax2.add_image(osm_tiles, 10)
-    # vmin bumped to 10 to hide clear-air radar noise
     display.plot_ppi_map('reflectivity', 0, vmin=10, vmax=64, ax=ax2,
                          cmap='NWSRef', title="Core Reflectivity",
                          min_lon=micro_bounds[0], max_lon=micro_bounds[1],
@@ -153,7 +185,7 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
 
     # --- PANEL 3: Micro Velocity ---
     ax3 = fig.add_subplot(223, projection=radar_proj)
-    ax3.set_extent(micro_bounds, crs=ccrs.PlateCarree()) # Fix Cartopy Bug
+    ax3.set_extent(micro_bounds, crs=ccrs.PlateCarree())
     ax3.add_image(osm_tiles, 10)
     display.plot_ppi_map('velocity', 1, vmin=-40, vmax=40, ax=ax3,
                          cmap='NWSVel', title="Core Velocity",
@@ -162,7 +194,7 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
 
     # --- PANEL 4: Dynamic Threat ---
     ax4 = fig.add_subplot(224, projection=radar_proj)
-    ax4.set_extent(micro_bounds, crs=ccrs.PlateCarree()) # Fix Cartopy Bug
+    ax4.set_extent(micro_bounds, crs=ccrs.PlateCarree())
     ax4.add_image(osm_tiles, 10)
 
     if prob_tor >= 15:
@@ -184,12 +216,13 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
                              min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
 
+    # Draw the White Warning Rectangles on ALL 4 PANELS!
     if storm_geom.get('type') == 'Polygon':
         storm_id = storm_props.get("ID", "Unknown")
-        for ax in [ax2, ax3, ax4]:
-            ax.plot([minx, maxx, maxx, minx, minx], [miny, miny, maxy, maxy, miny], color='red', linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
-            ax.text(minx, maxy + 0.02, f"Storm Object {storm_id}", color='red', fontsize=10, fontweight='bold',
-            transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=4))
+        for ax in [ax1, ax2, ax3, ax4]: # Added ax1 to get the box on the macro map too!
+            ax.plot([minx, maxx, maxx, minx, minx], [miny, miny, maxy, maxy, miny], color='white', linewidth=3, transform=ccrs.PlateCarree(), zorder=10)
+            ax.text(minx, maxy + 0.02, f"Storm Object {storm_id}", color='black', fontsize=10, fontweight='bold',
+            transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.9, edgecolor='none', pad=4))
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=120, bbox_inches='tight')
