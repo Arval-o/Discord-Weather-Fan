@@ -77,8 +77,22 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     radar_proj = ccrs.LambertConformal(central_longitude=radar.longitude['data'][0], central_latitude=radar.latitude['data'][0])
     osm_tiles = cimgt.OSM()
 
+    motion_e = float(storm_props.get("MOTION_EAST", 0))
+    motion_s = float(storm_props.get("MOTION_SOUTH", 0))
+    speed_kts = math.hypot(motion_e, motion_s)
+
+    lon_min, lon_max = lon - 1.0, lon + 1.0
+    lat_min, lat_max = lat - 1.0, lat + 1.0
+
+    if speed_kts > 10:
+        if motion_e > 0:   lon_min, lon_max = lon - 0.5, lon + 1.5
+        elif motion_e < 0: lon_min, lon_max = lon - 1.5, lon + 0.5
+
+        if motion_s > 0:   lat_min, lat_max = lat - 1.5, lat + 0.5
+        elif motion_s < 0: lat_min, lat_max = lat - 0.5, lat + 1.5
+
+    macro_bounds = [lon_min, lon_max, lat_min, lat_max]
     micro_bounds = [lon - 0.45, lon + 0.45, lat - 0.45, lat + 0.45]
-    macro_bounds = [lon - 1.0, lon + 1.0, lat - 1.0, lat + 1.0]
 
     # --- PANEL 1: Macro Reflectivity ---
     ax1 = fig.add_subplot(221, projection=radar_proj)
