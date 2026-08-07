@@ -116,7 +116,7 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
         coords = storm_geom['coordinates'][0]
         x = [c[0] for c in coords]
         y = [c[1] for c in coords]
-        ax1.plot(x, y, color='magenta', linewidth=3, transform=ccrs.PlateCarree())
+        ax1.plot(x, y, color='white', linewidth=3, transform=ccrs.PlateCarree())
 
         if speed_kts > 5: # Match the 5 knot threshold
             lat_radians = math.radians(lat)
@@ -129,13 +129,13 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
 
             end_lon = lon + (deg_lon_per_min * total_mins)
             end_lat = lat + (deg_lat_per_min * total_mins)
-            ax1.plot([lon, end_lon], [lat, end_lat], color='black', linewidth=2, transform=ccrs.PlateCarree(), zorder=10)
+            ax1.plot([lon, end_lon], [lat, end_lat], color='white', linewidth=2, transform=ccrs.PlateCarree(), zorder=10)
 
             for frac in [0.33, 0.66, 1.0]:
                 m_mins = total_mins * frac
                 x_m = lon + (deg_lon_per_min * m_mins)
                 y_m = lat + (deg_lat_per_min * m_mins)
-                ax1.plot(x_m, y_m, marker='x', color='black', markersize=7, markeredgewidth=2, transform=ccrs.PlateCarree(), zorder=11)
+                ax1.plot(x_m, y_m, marker='x', color='white', markersize=7, markeredgewidth=2, transform=ccrs.PlateCarree(), zorder=11)
                 ax1.text(x_m, y_m + 0.02, f"{int(m_mins)}m", color='black', fontsize=9, fontweight='bold', transform=ccrs.PlateCarree(), zorder=12, bbox=dict(facecolor='white', alpha=0.5, edgecolor='none', pad=2))
 
         minx, miny = min(x), min(y)
