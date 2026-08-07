@@ -297,12 +297,3 @@ def main():
         requests.post(f"{WEBHOOK_URL}?wait=true", json={"content": content, "embeds": embeds}, timeout=30)
 
     save_state(state)
-
-if __name__ == "__main__":
-    print("Starting SPC Bot Loop...")
-    while True:
-        try:
-            main()
-        except Exception as e:
-            print(f"Error: {e}")
-        time.sleep(300)
