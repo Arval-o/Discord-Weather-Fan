@@ -159,7 +159,7 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
         except:
             display.plot_ppi_map('reflectivity', 1, vmin=-8, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0], max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
     else:
-        display.plot_ppi_map('velocity', 2, vmin=-40, vmax=40, ax=ax4,
+        display.plot_ppi_map('velocity', 1, vmin=-40, vmax=40, ax=ax4,
                              cmap='NWSVel', title="Mid-Level Velocity (Wind)",
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
                              min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
