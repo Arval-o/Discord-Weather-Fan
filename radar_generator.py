@@ -89,7 +89,8 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
     lon_min, lon_max = lon - 1.0, lon + 1.0
     lat_min, lat_max = lat - 1.0, lat + 1.0
 
-    if speed_kts > 10:
+    # Camera shift threshold dropped to 5 knots!
+    if speed_kts > 5:
         if motion_e > 0:   lon_min, lon_max = lon - 0.5, lon + 1.5
         elif motion_e < 0: lon_min, lon_max = lon - 1.5, lon + 0.5
 
@@ -101,34 +102,28 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
 
     # --- PANEL 1: Macro Reflectivity ---
     ax1 = fig.add_subplot(221, projection=radar_proj)
+    ax1.set_extent(macro_bounds, crs=ccrs.PlateCarree()) # Fix Cartopy Bug
     ax1.add_image(osm_tiles, 8)
-    display.plot_ppi_map('reflectivity', 0, vmin=-8, vmax=64, ax=ax1,
+    # vmin bumped to 10 to hide clear-air radar noise
+    display.plot_ppi_map('reflectivity', 0, vmin=10, vmax=64, ax=ax1,
                          cmap='NWSRef',
                          title=f"{radar_id} Base Reflectivity & Path",
                          min_lon=macro_bounds[0], max_lon=macro_bounds[1],
                          min_lat=macro_bounds[2], max_lat=macro_bounds[3],
-                         resolution='50m', fig=fig, alpha=0.6)
+                         resolution='50m', fig=fig, alpha=0.7)
 
-    # Plot storm polygon and core warning box
     if storm_geom.get('type') == 'Polygon':
         coords = storm_geom['coordinates'][0]
         x = [c[0] for c in coords]
         y = [c[1] for c in coords]
-
         ax1.plot(x, y, color='magenta', linewidth=3, transform=ccrs.PlateCarree())
 
-        # Dynamic Precision Track Line
-        motion_e = float(storm_props.get("MOTION_EAST", 0))
-        motion_s = float(storm_props.get("MOTION_SOUTH", 0))
-        speed_kts = math.hypot(motion_e, motion_s)
-
-        if speed_kts > 10:
+        if speed_kts > 5: # Match the 5 knot threshold
             lat_radians = math.radians(lat)
             deg_lat_per_min = -(motion_s / 60.0) / 60.0
             deg_lon_per_min = (motion_e / 60.0) / math.cos(lat_radians) / 60.0
 
             dist_deg_per_min = math.hypot(deg_lon_per_min, deg_lat_per_min)
-
             fixed_length_deg = 0.5
             total_mins = fixed_length_deg / dist_deg_per_min
 
@@ -148,44 +143,48 @@ def generate_radar_image(storm_props, storm_geom, output_path="radar_output.png"
 
     # --- PANEL 2: Micro Reflectivity ---
     ax2 = fig.add_subplot(222, projection=radar_proj)
+    ax2.set_extent(micro_bounds, crs=ccrs.PlateCarree()) # Fix Cartopy Bug
     ax2.add_image(osm_tiles, 10)
-    display.plot_ppi_map('reflectivity', 0, vmin=-8, vmax=64, ax=ax2,
+    # vmin bumped to 10 to hide clear-air radar noise
+    display.plot_ppi_map('reflectivity', 0, vmin=10, vmax=64, ax=ax2,
                          cmap='NWSRef', title="Core Reflectivity",
                          min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                         min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
+                         min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
 
     # --- PANEL 3: Micro Velocity ---
     ax3 = fig.add_subplot(223, projection=radar_proj)
+    ax3.set_extent(micro_bounds, crs=ccrs.PlateCarree()) # Fix Cartopy Bug
     ax3.add_image(osm_tiles, 10)
     display.plot_ppi_map('velocity', 1, vmin=-40, vmax=40, ax=ax3,
                          cmap='NWSVel', title="Core Velocity",
                          min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                         min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
+                         min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
 
     # --- PANEL 4: Dynamic Threat ---
     ax4 = fig.add_subplot(224, projection=radar_proj)
+    ax4.set_extent(micro_bounds, crs=ccrs.PlateCarree()) # Fix Cartopy Bug
     ax4.add_image(osm_tiles, 10)
 
     if prob_tor >= 15:
         display.plot_ppi_map('spectrum_width', 1, vmin=0, vmax=15, ax=ax4,
                              cmap='NWS_SPW', title="Spectrum Width (Rotation/Debris)",
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                             min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
+                             min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
     elif prob_hail >= 30:
         try:
-            display.plot_ppi_map('cross_correlation_ratio', 0, vmin=0.8, vmax=1.05, ax=ax4,
+        display.plot_ppi_map('cross_correlation_ratio', 0, vmin=0.8, vmax=1.05, ax=ax4,
                                  cmap='RefDiff', title="Correlation Coefficient (Hail)",
                                  min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                                 min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
+                                 min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
         except:
-            display.plot_ppi_map('reflectivity', 1, vmin=-8, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0],max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
+            display.plot_ppi_map('reflectivity', 1, vmin=10, vmax=64, ax=ax4, cmap='NWSRef', title="Mid-Level Reflectivity", min_lon=micro_bounds[0],max_lon=micro_bounds[1], min_lat=micro_bounds[2], max_lat=micro_bounds[3],
+resolution='50m', fig=fig, alpha=0.8)
     else:
         display.plot_ppi_map('velocity', 1, vmin=-40, vmax=40, ax=ax4,
                              cmap='NWSVel', title="Mid-Level Velocity (Wind)",
                              min_lon=micro_bounds[0], max_lon=micro_bounds[1],
-                             min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.7)
+                             min_lat=micro_bounds[2], max_lat=micro_bounds[3], resolution='50m', fig=fig, alpha=0.8)
 
-    # Draw the Red Warning Rectangles around the core!
     if storm_geom.get('type') == 'Polygon':
         storm_id = storm_props.get("ID", "Unknown")
         for ax in [ax2, ax3, ax4]:
